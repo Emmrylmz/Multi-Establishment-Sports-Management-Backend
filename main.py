@@ -1,28 +1,29 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import players
+
+from app.config import settings
+from app.routers import auth, user
 
 app = FastAPI()
 
-# Set up CORS middleware
 origins = [
-    "http://localhost:3000",  # Add the URL of your frontend application
-    # You can add more origins as needed, or use ["*"] to allow all origins
+    settings.CLIENT_ORIGIN,
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # List of allowed origins
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],  # List of allowed methods
-    allow_headers=["*"],  # List of allowed headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-# Include the router
-app.include_router(players.router)
+app.include_router(auth.router, tags=['Auth'], prefix='/api/auth')
+app.include_router(user.router, tags=['Users'], prefix='/api/users')
 
-# Optional: Run the application using Uvicorn for development purposes
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+
+@app.get("/api/healthchecker")
+def root():
+    return {"message": "Welcome to FastAPI with MongoDB"}
+
