@@ -29,7 +29,7 @@ def get_config():
     config.authjwt_public_key = base64.b64decode(config.authjwt_public_key).decode('utf-8')
     config.authjwt_private_key = base64.b64decode(config.authjwt_private_key).decode('utf-8')
     return config
-
+    
 
 class NotVerified(Exception):
     pass
