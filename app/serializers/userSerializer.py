@@ -3,7 +3,7 @@ def userEntity(user) -> dict:
     return {
         "id": str(user["_id"]),
         "name": user.get("name", None),
-        "email": user.get("contact_info", {}).get("email", None),  # Safely access nested fields
+        "email": user.get("email", None),  # Safely access nested fields
         "password": user.get("password"),
         "photo": user.get("photo", None),
         "role": user.get("role", None),
