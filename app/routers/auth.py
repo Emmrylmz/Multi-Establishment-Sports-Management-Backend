@@ -26,17 +26,19 @@ async def create_user(payload: schemas.CreateUserSchema):
     if payload.password != payload.passwordConfirm:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='Passwords do not match')
+    user_data = payload.dict(exclude_none=False)
     #  Hash the password
-    payload.password = utils.hash_password(payload.password)
-    del payload.passwordConfirm
-    payload.role = 'user'
-    payload.verified = True
-    payload.email = payload.email.lower()
-    payload.created_at = datetime.utcnow()
-    payload.updated_at = payload.created_at
-    result = User.insert_one(payload.dict())
+    hashed_password = utils.hash_password(user_data["password"])
+    user_data['password'] = hashed_password
+    user_data['created_at'] = datetime.utcnow()
+    user_data.pop('passwordConfirm', None)
+
+    result =  User.insert_one(user_data)
     new_user = userResponseEntity(User.find_one({'_id': result.inserted_id}))
-    return {"status": "success", "user": new_user}
+    user_dict = {k: v for k, v in new_user.items() if k != 'password'}
+
+
+    return {"status": "success", "user": user_dict}
 
 
 @router.post('/login')

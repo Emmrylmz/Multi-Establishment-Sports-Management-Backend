@@ -6,16 +6,15 @@ from app.routers import auth, user
 
 app = FastAPI()
 
-origins = [
-    settings.CLIENT_ORIGIN,
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["*"],  # Specify actual methods used
+    allow_headers=["*"]
+
 )
 
 
