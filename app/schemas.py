@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, validator, constr
+from pydantic import BaseModel, EmailStr, validator, constr, Field
 from typing import List, Optional, Literal
 from datetime import datetime
 
@@ -6,12 +6,15 @@ from datetime import datetime
 class ContactInfo(BaseModel):
     phone: Optional[str] = None
 
+
 class ContactPerson(ContactInfo):
     name: Optional[str] = None
     email: Optional[EmailStr] = None
 
+
 class PersonalAttributesBase(BaseModel):
     age: Optional[int] = None
+
 
 class CreateUserSchema(BaseModel):
     email: EmailStr
@@ -26,22 +29,20 @@ class CreateUserSchema(BaseModel):
     personal_attributes: Optional[PersonalAttributesBase] = None
     created_at: datetime = None
 
-    @validator('email', pre=True, always=True)
+    @validator("email", pre=True, always=True)
     def normalize_email(cls, v):
         if v is not None:
             return v.lower()
         return v  # Return None or a default value if email is not provided
-
 
     class Config:
         schema_extra = {
             "example": {
                 "email": "user@example.com",
                 "password": "strongpassword",
-                "name": "John Doe"
+                "name": "John Doe",
             }
         }
-
 
 
 # THIS PART FOR RESPONSES
@@ -53,7 +54,6 @@ class LoginUserSchema(BaseModel):
 
 
 class UserResponseSchema(BaseModel):
-    id: str
     name: Optional[str]
     email: Optional[EmailStr]  # Make email optional if it could be None
     photo: Optional[str]
