@@ -12,4 +12,5 @@ except Exception:
 
 db = client[settings.MONGO_INITDB_DATABASE]
 User = db.users
+Event = db.events
 User.create_index([("email", pymongo.ASCENDING)], unique=True)

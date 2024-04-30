@@ -10,9 +10,25 @@ services:
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
       MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
     volumes:
-      - mongo:/data/db
+      - mongo_data:/data/db
     ports:
       - '6000:27017'
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: 'rabbitmq'
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - '5672:5672'     # RabbitMQ server
+      - '15672:15672'   # Management interface
+    tty: true
+    stdin_open: true
+    hostname: "0.0.0.0"
+
 volumes:
-  mongo:
+  mongo_data:
+  rabbitmq_data:
