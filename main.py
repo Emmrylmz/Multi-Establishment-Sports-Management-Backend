@@ -6,6 +6,7 @@ from app.routers import auth, user
 
 app = FastAPI()
 
+
 origins = ["*"]
 
 app.add_middleware(
@@ -13,16 +14,14 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],  # Specify actual methods used
-    allow_headers=["*"]
-
+    allow_headers=["*"],
 )
 
 
-app.include_router(auth.router, tags=['Auth'], prefix='/api/auth')
-app.include_router(user.router, tags=['Users'], prefix='/api/users')
+app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
+app.include_router(user.router, tags=["Users"], prefix="/api/users")
 
 
 @app.get("/api/healthchecker")
 def root():
     return {"message": "Welcome to FastAPI with MongoDB"}
-

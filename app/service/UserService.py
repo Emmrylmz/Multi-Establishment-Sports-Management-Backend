@@ -4,6 +4,7 @@ from app.database import User
 from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from datetime import datetime
+from bson import ObjectId
 
 
 class UserService:

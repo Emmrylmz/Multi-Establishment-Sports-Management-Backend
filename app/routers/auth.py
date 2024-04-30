@@ -5,10 +5,14 @@ from app import oauth2
 from app.database import User
 from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import schemas, utils
-from app.oauth2 import AuthJWT
+from app.oauth2 import AuthJWT, require_user
 from ..config import settings
 from fastapi import APIRouter
 from app.controller.AuthController import AuthController
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import JSONResponse
+from jose import jwt, JWTError
+from fastapi_jwt_auth import AuthJWT
 
 
 router = APIRouter()
@@ -28,6 +32,12 @@ async def register(payload: schemas.CreateUserSchema):
 @router.post("/login")
 def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
     return AuthController.login_user(payload, Authorize)
+
+
+@router.post("/checkToken")
+async def access_protected_resource(Authorize: AuthJWT = Depends(require_user)):
+    # If the function returns without error, it means the user is authenticated and verified
+    return {"message": "You have access to this protected resource"}
 
 
 @router.get("/refresh")
