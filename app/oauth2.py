@@ -66,4 +66,4 @@ def require_user(Authorize: AuthJWT = Depends()):
     except NotVerified as e:
         # Specific error for unverified users
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
-    return user_id
+    return user

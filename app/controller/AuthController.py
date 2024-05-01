@@ -51,7 +51,7 @@ class AuthController:
             expires_time=timedelta(minutes=settings.REFRESH_TOKEN_EXPIRES_IN),
         )
 
-        UserService.update_user_login(user["id"], access_token, refresh_token)
+        UserService.update_user_login(user, access_token, refresh_token)
 
         return {
             "status": "success",

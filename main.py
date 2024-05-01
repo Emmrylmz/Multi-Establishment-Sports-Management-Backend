@@ -4,7 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 # from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, user, notification
+from app.routers import auth, user, notification, event
+
 
 # from app.utils.websocket_manager import ConnectionManager
 from app.tools.RabbitClient import RabbitClient
@@ -35,6 +36,7 @@ rabbit_client = RabbitClient(url)
 app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
 app.include_router(user.router, tags=["Users"], prefix="/api/users")
 app.include_router(notification.trigger)
+app.include_router(event.router)
 #     notifications.router, tags=["Notifications"], prefix="/api/notifications"
 # )
 
