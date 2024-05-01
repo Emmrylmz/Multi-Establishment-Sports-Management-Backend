@@ -13,10 +13,10 @@ class EventService:
         """Creates a new event and stores it in the database."""
         event_data["created_at"] = datetime.utcnow()
 
-        result = await Event.insert_one(
+        result = Event.insert_one(
             event_data
         )  # Assuming Event is your MongoDB collection
-        return await EventService.get_event_by_id(result.inserted_id)
+        return EventService.get_event_by_id(result.inserted_id)
 
     @staticmethod
     def get_event_by_id(event_id: ObjectId) -> dict:

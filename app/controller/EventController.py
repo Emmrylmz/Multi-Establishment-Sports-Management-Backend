@@ -12,9 +12,7 @@ app = FastAPI()
 
 class EventController:
     @staticmethod
-    async def create_event(
-        event: CreateEventSchema, user: dict = Depends(require_user)
-    ):
+    async def create_event(event, user: dict = Depends(require_user)):
 
         # if user["role"] != "Coach":
         #     raise HTTPException(
@@ -24,7 +22,7 @@ class EventController:
         # event_data["creator_id"] = user[
         #     "id"
         # ]  # Assuming the user dict has an 'id' field
-        created_event = EventService.create_event(event_data)
+        created_event = await EventService.create_event(event_data)
         if not created_event:
             raise HTTPException(status_code=400, detail="Could not create event")
         return created_event
