@@ -36,7 +36,7 @@ rabbit_client = RabbitClient(url)
 app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
 app.include_router(user.router, tags=["Users"], prefix="/api/users")
 app.include_router(notification.trigger)
-app.include_router(event.router)
+app.include_router(event.router, tags=["events"], prefix="/events")
 #     notifications.router, tags=["Notifications"], prefix="/api/notifications"
 # )
 

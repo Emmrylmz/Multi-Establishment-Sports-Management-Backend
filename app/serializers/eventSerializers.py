@@ -1,13 +1,14 @@
 def eventEntity(event) -> dict:
 
     return {
-        "id": str(event["_id"]),
-        "name": event.get("name", None),
+        "event_id": str(event["event_id"]),
+        "event_type": event.get("event_type", None),
+        "creator_id": event.get("creator_id", None),
         "description": event.get("description", None),
+        "place": event.get("place", None),
         "team_id": event.get("team_id", None),
         "created_at": event.get("created_at", None),
         "event_date": event.get("event_date", None),
-        "type": event.get("type", None),
     }
 
 

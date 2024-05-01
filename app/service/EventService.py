@@ -2,9 +2,6 @@ from bson import ObjectId
 from datetime import datetime
 from app.database import Event  # Assuming 'Event' is your MongoDB collection
 from app.serializers.eventSerializers import eventEntity
-import logging
-
-logging.basicConfig(level=logging.DEBUG)
 
 
 class EventService:

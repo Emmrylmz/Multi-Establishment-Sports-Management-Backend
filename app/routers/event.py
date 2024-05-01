@@ -10,16 +10,14 @@ from ..models.event_schemas import CreateEventSchema
 
 event_controller = EventController()
 
-router = APIRouter(
-    prefix="/events", tags=["events"], responses={404: {"description": "Not found"}}
-)
+router = APIRouter()
 
 
 @router.post(
-    "/create_event",
+    "/create",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_event(payload: CreateEventSchema = Depends()):
+async def create_event(payload: CreateEventSchema):
     return await EventController.create_event(payload)
 
 
