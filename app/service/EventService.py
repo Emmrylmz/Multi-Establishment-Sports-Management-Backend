@@ -34,7 +34,7 @@ class EventService:
         return result.deleted_count > 0
 
     @staticmethod
-    def list_events() -> list:
+    def list_events(team_id: str) -> list:
         """Lists all events."""
-        events = Event.find({})
+        events = Event.find({"team_id": team_id})
         return [eventEntity(event) for event in events]

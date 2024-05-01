@@ -17,7 +17,9 @@ def eventResponseEntity(user) -> dict:
     return {
         "name": event.get("name", None),
         "event_date": event.get("event_date", None),
-        "created_at": user.get("created_at", None),
+        "description": event.get("description", None),
+        "place": event.get("place", None),
+        "event_type": event.get("event_type", None),
     }
 
 

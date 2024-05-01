@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException, Depends, status
 from pydantic import BaseModel
 from ..tools.RabbitClient import RabbitClient
-from ..models import event_schemas
 from ..database import Event
 from app.service.EventService import EventService
 from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
+from bson import ObjectId
+
 
 app = FastAPI()
 
@@ -40,7 +41,7 @@ class EventController:
         )
 
     @staticmethod
-    async def read_event(event_id: str, user: dict = Depends(require_user)):
+    async def read_event(event_id: ObjectId):
         event = EventService.get_event_by_id(ObjectId(event_id))
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
@@ -57,11 +58,14 @@ class EventController:
             raise HTTPException(status_code=404, detail="Event not found")
         return updated_event
 
-    async def delete_event(event_id: str, user: dict = Depends(require_user)):
-        if not EventService.delete_event(ObjectId(event_id)):
-            raise HTTPException(status_code=404, detail="Event not found")
-        return {"message": "Event deleted successfully"}
+    async def delete_event(event_id: ObjectId):
+        result = EventService.delete_event(ObjectId(event_id))
+        # raise HTTPException(status_code=404, detail="Event not found")
+        return result
 
-    async def list_events(user: dict = Depends(require_user)):
-        events = EventService.list_events()
+    async def list_events(team_id: str):
+        events = EventService.list_events(team_id)
         return events
+
+
+# , user: dict = Depends(require_user)
