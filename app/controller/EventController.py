@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status
 from pydantic import BaseModel
 from ..tools.RabbitClient import RabbitClient
 from ..models import event_schemas
@@ -12,25 +12,32 @@ app = FastAPI()
 
 class EventController:
     @staticmethod
-    async def create_event(event, user: dict = Depends(require_user)):
+    async def create_event(
+        event: CreateEventSchema, user: dict = Depends(require_user)
+    ):
+        # Role check - ensuring only "Coach" can create events
+        if user.get("role") != "Coach":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only coaches can create events.",
+            )
 
-        # if user["role"] != "Coach":
-        #     raise HTTPException(
-        #         status_code=403, detail="Only coaches can create events."
-        #     )
+        # Add the user's ID to the event data as the creator
         event_data = event.dict()
-        # event_data["creator_id"] = user[
-        #     "id"
-        # ]  # Assuming the user dict has an 'id' field
+        event_data["creator_id"] = user["id"]
+
+        # Call to your service layer to save the event
         created_event = await EventService.create_event(event_data)
         if not created_event:
-            raise HTTPException(status_code=400, detail="Could not create event")
-        return created_event
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_BAD_REQUEST,
+                detail="Could not create event",
+            )
 
-        if isinstance(created_event, CreateEventSchema):
-            return created_event
-        else:
-            return created_event.dict()  # Convert to dict if necessary
+        # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
+        return (
+            created_event if isinstance(created_event, dict) else created_event.dict()
+        )
 
     @staticmethod
     async def read_event(event_id: str, user: dict = Depends(require_user)):
