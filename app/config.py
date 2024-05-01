@@ -10,12 +10,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRES_IN: int
     ALGORITHM: str
     CLIENT_ORIGIN: str
+    RABBITMQ_URL: str
 
     class Config:
-        env_file = './.env'
+        env_file = "./.env"
 
 
 settings = Settings()
-
-
-
