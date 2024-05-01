@@ -1,11 +1,11 @@
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, status, Depends, HTTPException
 from typing import List
 from ..controller.EventController import EventController
 from pydantic import BaseModel
 from ..models.event_schemas import CreateEventSchema
 from ..oauth2 import require_user
 from ..service.EventService import EventService
-from ..models.event_schemas import CreateEventSchema
+from bson import ObjectId
 
 
 event_controller = EventController()
@@ -22,17 +22,18 @@ async def create_event(payload: CreateEventSchema, user: dict = Depends(require_
 
 
 @router.get("/{event_id}", response_model=CreateEventSchema)
-# def read_event()
+async def get_event(event_id: str):
+    return await EventController.read_event(event_id)
 
 
-@router.delete("/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_event(event_id: str, user: dict = Depends(require_user)):
-    if not EventService.delete_event(ObjectId(event_id)):
-        raise HTTPException(status_code=404, detail="Event not found")
-        return {"message": "Event deleted successfully"}
+@router.delete("/delete/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_event(event_id: str):
+    return await EventController.delete_event(event_id)
 
 
-@router.get("/", response_model=List[CreateEventSchema])
-async def list_events(user: dict = Depends(require_user)):
-    events = EventService.list_events()
-    return events
+@router.post("/list", response_model=List[CreateEventSchema])
+async def list_events(team_id: str):
+    return EventService.list_events(team_id)
+
+
+# , user: dict = Depends(require_user)
