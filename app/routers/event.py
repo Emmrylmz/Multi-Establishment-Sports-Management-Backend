@@ -36,4 +36,9 @@ async def list_events(team_id: str):
     return EventService.list_events(team_id)
 
 
+@router.post("/update/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def update_event(event_id: str, payload: CreateEventSchema):
+    return await EventController.update_event(event_id, payload)
+
+
 # , user: dict = Depends(require_user)

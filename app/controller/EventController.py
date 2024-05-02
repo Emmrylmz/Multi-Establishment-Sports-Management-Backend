@@ -48,9 +48,7 @@ class EventController:
         return event
 
     @staticmethod
-    async def update_event(
-        event_id: str, event: CreateEventSchema, user: dict = Depends(require_user)
-    ):
+    async def update_event(event_id: str, event: CreateEventSchema):
         updated_event = EventService.update_event(
             ObjectId(event_id), event.dict(exclude_unset=True)
         )
