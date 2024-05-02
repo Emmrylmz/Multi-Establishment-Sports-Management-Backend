@@ -1,11 +1,13 @@
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from pydantic import BaseModel
-from ..tools.RabbitClient import RabbitClient
 from ..database import Event
 from app.service.EventService import EventService
 from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
+from ..serializers.eventSerializers import eventEntity
+
+# from ...main import rabbit_client
 
 
 app = FastAPI()
@@ -14,9 +16,11 @@ app = FastAPI()
 class EventController:
     @staticmethod
     async def create_event(
-        event: CreateEventSchema, user: dict = Depends(require_user)
+        event: CreateEventSchema, request: Request, user: dict = Depends(require_user)
     ):
         # Role check - ensuring only "Coach" can create events
+        app = request.app
+
         if user.get("role") != "Coach":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -26,6 +30,7 @@ class EventController:
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
         event_data["creator_id"] = user["id"]
+        event_data["event_date"] = event_data["event_date"].isoformat()
 
         # Call to your service layer to save the event
         created_event = await EventService.create_event(event_data)
@@ -36,6 +41,7 @@ class EventController:
             )
 
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
+        app.pika_client.send_message({"message": event_data})
         return (
             created_event if isinstance(created_event, dict) else created_event.dict()
         )

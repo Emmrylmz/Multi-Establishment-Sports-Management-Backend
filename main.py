@@ -1,5 +1,7 @@
 from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+from app.tools.PikaClient import PikaClient
 
 # from fastapi.staticfiles import StaticFiles
 
@@ -10,7 +12,20 @@ from app.routers import auth, user, notification, event
 # from app.utils.websocket_manager import ConnectionManager
 from app.tools.RabbitClient import RabbitClient
 
-app = FastAPI()
+
+class FooApp(FastAPI):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.pika_client = PikaClient(self.log_incoming_message)
+
+    @classmethod
+    def log_incoming_message(cls, message: dict):
+        """Method to do something meaningful with the incoming message"""
+        # logger.info("Here we got incoming message %s", message)
+
+
+app = FooApp()
 
 # CORS setup
 origins = ["*"]
@@ -30,8 +45,11 @@ app.add_middleware(
 
 # RabbitMQ Client Setup
 url = "amqp://guest:guest@172.24.112.1:5672/"
-rabbit_client = RabbitClient(url)
-
+rabbit_client = RabbitClient(
+    rabbit_url=url,
+    service="notification",
+    # incoming_message_handler=your_message_handler_function  # Define this function to handle incoming messages
+)
 # Include routers for authentication and user management
 app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
 app.include_router(user.router, tags=["Users"], prefix="/api/users")
@@ -59,8 +77,11 @@ app.include_router(event.router, tags=["events"], prefix="/events")
 @app.on_event("startup")
 async def startup_event():
     # Connect to RabbitMQ
+    loop = asyncio.get_running_loop()
+    task = loop.create_task(app.pika_client.consume(loop))
+
     await rabbit_client.start()
-    # await rabbit_client.start_consumer()
+    await rabbit_client.start_subscription()
 
 
 @app.on_event("shutdown")
