@@ -1,7 +1,7 @@
 def eventEntity(event) -> dict:
 
     return {
-        "event_id": str(event["event_id"]),
+        "event_id": event.get("event_id", None),
         "event_type": event.get("event_type", None),
         "creator_id": event.get("creator_id", None),
         "description": event.get("description", None),
