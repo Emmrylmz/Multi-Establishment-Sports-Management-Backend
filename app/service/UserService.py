@@ -48,6 +48,14 @@ class UserService:
         # Here you can update any login related fields in the user model if necessary
         pass
 
+    @staticmethod
+    def validate_role(user: dict, role: "Coach"):
+        if user.get("role") != role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{role} user not verified",
+            )
+
     # @staticmethod
     # def get_current_user(token: str = Depends(user_service.get_current_user_token)):
     #     """

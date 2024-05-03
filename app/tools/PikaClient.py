@@ -14,23 +14,25 @@ logger = logging.getLogger(__name__)
 
 class PikaClient:
     def __init__(self, process_callable):
-        self.publish_queue_name = "abs"
         self.connection = pika.BlockingConnection(
             pika.ConnectionParameters(host="localhost", port=5672, heartbeat=600)
         )
         self.channel = self.connection.channel()
-        queue_result = self.channel.queue_declare(queue=self.publish_queue_name)
-        self.callback_queue = queue_result.method.queue
         self.process_callable = process_callable
         logger.info("Pika connection initialized")
 
-    async def consume(self, loop):
-        """Setup message listener with the current running loop"""
+    def declare_queue(self, queue_name):
+        """Dynamically declare a new queue"""
+        queue_result = self.channel.queue_declare(queue=queue_name, durable=True)
+        return queue_result.method.queue
+
+    async def consume(self, loop, queue_name):
+        """Setup message listener for a specific queue with the current running loop"""
         connection = await connect_robust(host="localhost", port=5672, loop=loop)
         channel = await connection.channel()
-        queue = await channel.declare_queue(self.publish_queue_name)
+        queue = await channel.declare_queue(queue_name)
         await queue.consume(self.process_incoming_message, no_ack=False)
-        logger.info("Established pika async listener")
+        logger.info(f"Established pika async listener on {queue_name}")
         return connection
 
     async def process_incoming_message(self, message):
@@ -46,11 +48,11 @@ class PikaClient:
         else:
             logger.warning("Received an empty message")
 
-    def send_message(self, message: dict):
+    def send_message(self, message: dict, routing_key):
         """Method to publish message to RabbitMQ"""
         self.channel.basic_publish(
             exchange="",
-            routing_key=self.publish_queue_name,
+            routing_key=routing_key,
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue, correlation_id=str(uuid.uuid4())
             ),
@@ -61,14 +63,3 @@ class PikaClient:
         """Close the Pika connection"""
         self.connection.close()
         logger.info("Pika connection closed")
-
-
-# Example usage of PikaClient with a dummy callable function
-if __name__ == "__main__":
-
-    def process_message(data):
-        print("Processing:", data)
-
-    client = PikaClient(process_message)
-    client.send_message({"key": "value"})
-    client.close()

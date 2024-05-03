@@ -2,22 +2,15 @@ from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from app.tools.PikaClient import PikaClient
-
-# from fastapi.staticfiles import StaticFiles
-
 from app.config import settings
-from app.routers import auth, user, notification, event
-
-
-# from app.utils.websocket_manager import ConnectionManager
+from app.routers import auth, user, notification, event, team
 from app.tools.RabbitClient import RabbitClient
 
 
 class FooApp(FastAPI):
-
-    def __init__(self, *args, **kwargs):
+    def __init__(self, rabbit_url, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.pika_client = PikaClient(self.log_incoming_message)
+        self.rabbit_client = RabbitClient(rabbit_url=rabbit_url)
 
     @classmethod
     def log_incoming_message(cls, message: dict):
@@ -25,7 +18,8 @@ class FooApp(FastAPI):
         # logger.info("Here we got incoming message %s", message)
 
 
-app = FooApp()
+url = "amqp://guest:guest@172.24.112.1:5672/"
+app = FooApp(rabbit_url=url)
 
 # CORS setup
 origins = ["*"]
@@ -44,17 +38,17 @@ app.add_middleware(
 # manager = ConnectionManager()
 
 # RabbitMQ Client Setup
-url = "amqp://guest:guest@172.24.112.1:5672/"
-rabbit_client = RabbitClient(
-    rabbit_url=url,
-    service="notification",
-    # incoming_message_handler=your_message_handler_function  # Define this function to handle incoming messages
-)
+# rabbit_client = RabbitClient(
+#     rabbit_url=url,
+#     service="notification",
+#     # incoming_message_handler=your_message_handler_function  # Define this function to handle incoming messages
+# )
 # Include routers for authentication and user management
 app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
 app.include_router(user.router, tags=["Users"], prefix="/api/users")
 app.include_router(notification.trigger)
-app.include_router(event.router, tags=["events"], prefix="/events")
+app.include_router(event.router, tags=["events"], prefix="/api/events")
+app.include_router(team.router, tags=["teams"], prefix="/api/teams")
 #     notifications.router, tags=["Notifications"], prefix="/api/notifications"
 # )
 
@@ -77,11 +71,10 @@ app.include_router(event.router, tags=["events"], prefix="/events")
 @app.on_event("startup")
 async def startup_event():
     # Connect to RabbitMQ
-    loop = asyncio.get_running_loop()
-    task = loop.create_task(app.pika_client.consume(loop))
+    # app.pika_client = PikaClient()  # Ensure you initialize this correctly
 
-    await rabbit_client.start()
-    await rabbit_client.start_subscription()
+    await app.rabbit_client.start()
+    # await rabbit_client.start_subscription()
 
 
 @app.on_event("shutdown")

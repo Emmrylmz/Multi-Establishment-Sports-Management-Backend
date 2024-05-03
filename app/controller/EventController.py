@@ -1,16 +1,17 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
 from pydantic import BaseModel
-from ..database import Event
+from ..database import Event, User
 from app.service.EventService import EventService
 from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
-from ..serializers.eventSerializers import eventEntity
+from ..service.UserService import UserService
+
 
 # from ...main import rabbit_client
 
 
-app = FastAPI()
+event_service = EventService(Event)
 
 
 class EventController:
@@ -20,42 +21,34 @@ class EventController:
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
-
-        if user.get("role") != "Coach":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only coaches can create events.",
-            )
-
+        UserService.validate_role(user, "Coach")
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
         event_data["creator_id"] = user["id"]
-        event_data["event_date"] = event_data["event_date"].isoformat()
 
         # Call to your service layer to save the event
-        created_event = await EventService.create_event(event_data)
+        created_event = await event_service.create(event_data)
         if not created_event:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_BAD_REQUEST,
                 detail="Could not create event",
             )
-
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
-        app.pika_client.send_message({"message": event_data})
-        return (
-            created_event if isinstance(created_event, dict) else created_event.dict()
+        await app.rabbit_client.publish_message(
+            queue="team123", message={"message": event_data}
         )
+        return created_event
 
     @staticmethod
     async def read_event(event_id: ObjectId):
-        event = EventService.get_event_by_id(ObjectId(event_id))
+        event = event_service.get_by_id(event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         return event
 
     @staticmethod
     async def update_event(event_id: str, event: CreateEventSchema):
-        updated_event = EventService.update_event(
+        updated_event = event_service.update_event(
             ObjectId(event_id), event.dict(exclude_unset=True)
         )
         if not updated_event:
@@ -63,12 +56,12 @@ class EventController:
         return updated_event
 
     async def delete_event(event_id: ObjectId):
-        result = EventService.delete_event(ObjectId(event_id))
+        result = event_service.delete_event(ObjectId(event_id))
         # raise HTTPException(status_code=404, detail="Event not found")
         return result
 
     async def list_events(team_id: str):
-        events = EventService.list_events(team_id)
+        events = event_service.list_events(team_id)
         return events
 
 
