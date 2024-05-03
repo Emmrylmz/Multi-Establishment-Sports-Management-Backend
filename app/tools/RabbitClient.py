@@ -3,7 +3,7 @@ import asyncio
 from typing import Callable, Optional, Any
 
 # Third party modules
-import ujson as json
+import json
 from aio_pika.exceptions import AMQPConnectionError
 from aio_pika import (
     DeliveryMode,
@@ -13,6 +13,7 @@ from aio_pika import (
     Message,
 )
 from ..config import settings
+from bson import json_util
 
 
 # -----------------------------------------------------------------------------
@@ -105,11 +106,11 @@ class RabbitClient:
 
     # ---------------------------------------------------------
     #
-    async def start_subscription(self):
+    async def start_subscription(self, queue_name: str):
         """Setup message listener with the current running asyncio loop."""
 
         # Creating a receive queue.
-        queue = await self.channel.declare_queue(name=self.service_name, durable=True)
+        queue = await self.channel.declare_queue(name=queue_name, durable=True)
 
         # Start consuming existing and future messages.
         await queue.consume(self._process_incoming_message, no_ack=False)
@@ -127,7 +128,7 @@ class RabbitClient:
         message_body = Message(
             content_type="application/json",
             delivery_mode=DeliveryMode.PERSISTENT,
-            body=json.dumps(message, ensure_ascii=False).encode(),
+            body=json.dumps(message, indent=4, sort_keys=True, default=str).encode(),
         )
         await self.channel.default_exchange.publish(
             routing_key=queue, message=message_body

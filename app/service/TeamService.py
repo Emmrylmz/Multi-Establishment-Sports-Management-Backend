@@ -6,7 +6,7 @@ from app.serializers.eventSerializers import eventEntity
 from .MongoDBService import MongoDBService
 
 
-class EventService(MongoDBService):
+class TeamService(MongoDBService):
     def __init__(self, collection: Collection):
         super().__init__(collection)
 

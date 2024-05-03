@@ -5,7 +5,6 @@ from bson import ObjectId
 
 
 class CreateEventSchema(BaseModel):
-    event_id: str
     event_type: Literal["Game", "Training"]
     creator_id: str
     place: str
