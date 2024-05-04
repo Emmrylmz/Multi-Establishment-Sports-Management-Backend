@@ -1,7 +1,6 @@
 from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-from app.tools.PikaClient import PikaClient
 from app.config import settings
 from app.routers import auth, user, notification, event, team
 from app.tools.RabbitClient import RabbitClient
@@ -18,7 +17,7 @@ class FooApp(FastAPI):
         # logger.info("Here we got incoming message %s", message)
 
 
-url = "amqp://guest:guest@172.24.112.1:5672/"
+url = "amqp://guest:guest@localhost:5672//"
 app = FooApp(rabbit_url=url)
 
 # CORS setup
@@ -80,6 +79,7 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     # Close RabbitMQ connection
+    # stannsey
     await rabbit_client.close()
     print("RabbitMQ connection closed.")
 
