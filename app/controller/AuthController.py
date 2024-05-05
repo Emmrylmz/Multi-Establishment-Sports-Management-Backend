@@ -2,7 +2,7 @@
 
 from fastapi import HTTPException, status
 from app.service.UserService import UserService
-from .. import schemas
+from ..models import schemas
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from datetime import datetime, timedelta
 from app.config import settings
@@ -51,7 +51,7 @@ class AuthController:
             expires_time=timedelta(minutes=settings.REFRESH_TOKEN_EXPIRES_IN),
         )
 
-        UserService.update_user_login(user["id"], access_token, refresh_token)
+        UserService.update_user_login(user, access_token, refresh_token)
 
         return {
             "status": "success",
