@@ -2,6 +2,7 @@ from pymongo.collection import Collection
 from bson import ObjectId
 from datetime import datetime
 from fastapi.encoders import jsonable_encoder
+from motor.motor_asyncio import AsyncIOMotorClient
 
 
 class MongoDBService:
@@ -31,10 +32,12 @@ class MongoDBService:
         result = self.collection.delete_one({"_id": doc_id})
         return result.deleted_count > 0
 
-    def list(self, query: dict) -> list:
+    async def list(self, query: dict) -> list:
         """Lists documents based on a query."""
-        documents = self.collection.find(query)
-        return [self.entity(doc) for doc in documents]
+        jsonable_encoder(query).encode()
+        cursor = self.collection.find(query)
+        documents = await cursor.to_list(length=None)  # Fetch all documents from cursor
+        return documents
 
     def entity(self, document: dict) -> dict:
         """Transforms the document into a more usable entity, if necessary."""
