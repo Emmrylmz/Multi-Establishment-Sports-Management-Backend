@@ -15,6 +15,11 @@ class EventService(MongoDBService):
         print("Additional logic before creating an event")
         return await super().create(data)
 
+    # async def list_events(self, team_id: dict):
+    #     query = {"team_id": team_id}
+    #     events = await event_service.list(query)
+    #     return events
+
     # def entity(self, document: dict):
     #     # Customize how event documents are transformed before they are returned
     #     if document:

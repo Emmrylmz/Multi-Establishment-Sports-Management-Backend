@@ -73,8 +73,11 @@ async def startup_event():
     # app.pika_client = PikaClient()  # Ensure you initialize this correctly
 
     await app.rabbit_client.start()
+<<<<<<< HEAD
     print("RabbitMQ connection started.")
     # await rabbit_client.start_subscription()
+=======
+>>>>>>> f801e6c (latest)
 
 
 @app.on_event("shutdown")
@@ -83,6 +86,3 @@ async def shutdown_event():
     # stannsey
     await rabbit_client.close()
     print("RabbitMQ connection closed.")
-
-
-# Add the RabbitMQ response handling logic here if needed

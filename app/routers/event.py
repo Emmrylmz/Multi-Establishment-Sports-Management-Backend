@@ -33,9 +33,9 @@ async def delete_event(event_id: str):
     return await EventController.delete_event(event_id)
 
 
-@router.post("/list", response_model=List[CreateEventSchema])
-async def list_events(team_id: str):
-    return EventService.list_events(team_id)
+@router.post("/list")
+def list_events(query: dict):
+    return EventController.list_events(query)
 
 
 @router.post("/update/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
