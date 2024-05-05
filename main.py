@@ -1,7 +1,6 @@
 from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-from app.tools.PikaClient import PikaClient
 from app.config import settings
 from app.routers import auth, user, notification, event, team
 from app.tools.RabbitClient import RabbitClient
@@ -74,7 +73,6 @@ async def startup_event():
     # app.pika_client = PikaClient()  # Ensure you initialize this correctly
 
     await app.rabbit_client.start()
-    # await rabbit_client.start_subscription()
 
 
 @app.on_event("shutdown")
@@ -82,6 +80,3 @@ async def shutdown_event():
     # Close RabbitMQ connection
     await rabbit_client.close()
     print("RabbitMQ connection closed.")
-
-
-# Add the RabbitMQ response handling logic here if needed

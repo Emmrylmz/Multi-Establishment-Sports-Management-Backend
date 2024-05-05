@@ -6,7 +6,6 @@ from ..tools.RabbitClient import RabbitClient
 from pydantic import BaseModel
 import time
 import asyncio
-from ..tools.MessagingQueue import mq
 
 trigger = APIRouter(prefix="/api/trigger", tags=["trigger_in"])
 

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
 from ..database import Event, User
 from app.service.EventService import EventService
@@ -6,6 +6,7 @@ from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
 from ..service.UserService import UserService
+import boto3
 
 
 # from ...main import rabbit_client
@@ -48,7 +49,8 @@ class EventController:
 
     @staticmethod
     async def update_event(event_id: str, event: CreateEventSchema):
-        updated_event = event_service.update_event(
+        # update
+        updated_event = event_service.update(
             ObjectId(event_id), event.dict(exclude_unset=True)
         )
         if not updated_event:
@@ -60,8 +62,8 @@ class EventController:
         # raise HTTPException(status_code=404, detail="Event not found")
         return result
 
-    async def list_events(team_id: str):
-        events = event_service.list_events(team_id)
+    def list_events(query: dict):
+        events = event_service.list(query)
         return events
 
 
