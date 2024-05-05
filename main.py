@@ -73,6 +73,7 @@ async def startup_event():
     # app.pika_client = PikaClient()  # Ensure you initialize this correctly
 
     await app.rabbit_client.start()
+    print("RabbitMQ connection started.")
     # await rabbit_client.start_subscription()
 
 
