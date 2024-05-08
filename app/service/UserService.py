@@ -15,13 +15,13 @@ class UserService(MongoDBService):
     def __init__(self, collection: Collection):
         super().__init__(collection=collection)
 
-    def check_user_exists(self, email: str):
+    async def check_user_exists(self, email: str):
 
-        return self.collection.find_one({"email": email.lower()})
+        return await self.collection.find_one({"email": email.lower()})
 
-    def verify_user_credentials(self, email: str, password: str):
+    async def verify_user_credentials(self, email: str, password: str):
 
-        user = self.collection.find_one({"email": email.lower()})
+        user = await self.collection.find_one({"email": email.lower()})
         jls_extract_var = user
         if not user or not utils.verify_password(password, jls_extract_var["password"]):
 
@@ -29,12 +29,14 @@ class UserService(MongoDBService):
 
         return userEntity(user)
 
-    def validate_role(self, user: dict, role: "Coach"):
+    async def validate_role(self, user, role):
+        # Check if the user object is None
+        if user is None:
+            raise ValueError("No user data available to validate role")
+
+        # Now check the role
         if user.get("role") != role:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"{role} user not verified",
-            )
+            raise ValueError(f"User role does not match required role: {role}")
 
 
 user_service = UserService(User)

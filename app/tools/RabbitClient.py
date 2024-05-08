@@ -41,7 +41,6 @@ class RabbitClient:
         self,
         rabbit_url: str,
         service: Optional[str] = None,
-        callback: Optional[Callable] = None,
     ):
         """The class initializer.
 
@@ -132,7 +131,7 @@ class RabbitClient:
         self.channel = await self.connection.channel()
 
         # To make sure the load is evenly distributed between the workers.
-        await self.channel.set_qos(prefetch_count=100)
+        await self.channel.set_qos(prefetch_count=1)
 
     # ---------------------------------------------------------
     #

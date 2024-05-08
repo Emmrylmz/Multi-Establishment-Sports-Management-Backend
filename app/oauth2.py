@@ -44,25 +44,22 @@ class UserNotFound(Exception):
     pass
 
 
-def require_user(Authorize: AuthJWT = Depends()):
+async def require_user(Authorize: AuthJWT = Depends()):
     try:
         Authorize.jwt_required()
         user_id = Authorize.get_jwt_subject()
-        user = user_service.get_by_id(user_id)
+        user = await user_service.get_by_id(user_id)  # Now asynchronous
 
         if not user:
             raise UserNotFound("User no longer exists")
 
     except AuthJWTException as e:
-        # Handle errors from AuthJWT specifically
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication problem: Token is invalid or expired",
         )
     except UserNotFound as e:
-        # Specific error for user not found
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except NotVerified as e:
-        # Specific error for unverified users
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
     return user

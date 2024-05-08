@@ -39,8 +39,8 @@ def get_push_token(payload: PushTokenSchema, user: dict = Depends(require_user))
 
 
 @router.post("/login")
-def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
-    return AuthController.login_user(payload, Authorize)
+async def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
+    return await AuthController.login_user(payload, Authorize)
 
 
 @router.post("/checkToken")
@@ -55,9 +55,9 @@ def refresh_token(response: Response, Authorize: AuthJWT = Depends()):
 
 
 @router.get("/logout", status_code=status.HTTP_200_OK)
-def logout(
+async def logout(
     response: Response,
     Authorize: AuthJWT = Depends(),
     user_id: str = Depends(oauth2.require_user),
 ):
-    return AuthController.logout(response, Authorize, user_id)
+    return await AuthController.logout(response, Authorize, user_id)

@@ -26,3 +26,11 @@ class CreateTeamSchema(BaseModel):
     class Config:
         orm_mode = True
         fields = {"id": "_id"}
+
+
+class PlayerTokenRequest(BaseModel):
+    team_id: str
+
+    class Config:
+        orm_mode = True
+        fields = {"id": "_id"}
