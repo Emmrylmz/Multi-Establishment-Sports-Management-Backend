@@ -4,12 +4,7 @@ from ..controller.EventController import EventController
 from pydantic import BaseModel
 from ..models.event_schemas import CreateEventSchema
 from ..oauth2 import require_user
-from ..service.EventService import EventService
 from bson import ObjectId
-from fastapi.encoders import jsonable_encoder
-from ..utils import JSONEncoder
-from bson import json_util
-import json
 
 event_controller = EventController()
 
@@ -47,14 +42,6 @@ def list_events(query: dict):
 @router.post("/update/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def update_event(event_id: str, payload: CreateEventSchema):
     return await EventController.update_event(event_id, payload)
-
-
-@router.post("/send-message")
-async def send_message(payload, request: Request):
-    # Access the pika_client from the app instance
-    app = request.app
-    await app.pika_client.send_message({"message": payload.message})
-    return {"status": "ok"}
 
 
 # , user: dict = Depends(require_user)

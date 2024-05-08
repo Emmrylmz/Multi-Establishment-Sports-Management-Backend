@@ -34,8 +34,8 @@ class AuthController:
         return {"status": "success", "user": user_dict}
 
     @staticmethod
-    def login_user(login_user_schema: schemas.LoginUserSchema, Authorize):
-        user = user_service.verify_user_credentials(
+    async def login_user(login_user_schema: schemas.LoginUserSchema, Authorize):
+        user = await user_service.verify_user_credentials(
             login_user_schema.email, login_user_schema.password
         )
         if not user:

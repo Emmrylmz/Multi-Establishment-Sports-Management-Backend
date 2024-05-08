@@ -1,11 +1,5 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
-from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
-
-from ..tools.WebSocketManager import manager
+from fastapi import APIRouter
 from ..tools.RabbitClient import RabbitClient
-from pydantic import BaseModel
-import time
-import asyncio
 from ..tools.ExponentServerSDK import push_client, PushMessage
 from ..models.notification_schemas import NotificationRequest
 
