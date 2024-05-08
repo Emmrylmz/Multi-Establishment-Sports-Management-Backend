@@ -6,72 +6,26 @@ from ..tools.RabbitClient import RabbitClient
 from pydantic import BaseModel
 import time
 import asyncio
+from ..tools.ExponentServerSDK import push_client, PushMessage
+from ..models.notification_schemas import NotificationRequest
 
-trigger = APIRouter(prefix="/api/trigger", tags=["trigger_in"])
-
-
-class Demonstrate(BaseModel):
-    body: dict
-    user_id: int
+router = APIRouter(prefix="/api/notification", tags=["trigger_in"])
 
 
-State = []
-
-
-def get_current_user():
-    return {"id": 1}
-
-
-@trigger.post("/push-in/", status_code=200)
-async def registration(demo: Demonstrate, user: dict = Depends(get_current_user)):
-    demo = demo.dict()
-
-    print(manager.active_connections)
-
-    if manager.get_ws(demo["user_id"]):
-        ws_alive = await manager.pong(manager.get_ws(demo["user_id"]))
-        if ws_alive:
-            await manager.send_personal_message(demo)
-        else:
-            mq.publish_notification(demo)
-    else:
-        mq.publish_notification(demo)
-
-    State.append(demo)
-
-    # print(State)
-    return {"message": "This has been published"}
-
-
-{"message": {"body": {"testing": "God abeg"}, "user_id": 1}, "delivery_tag": 2}
-
-
-@trigger.websocket("/notifier/ws/")
-async def notification_socket(
-    websocket: WebSocket, user: dict = Depends(get_current_user)
-):
-    await manager.connect(websocket, user["id"])
+@router.post("/send_notification/")
+async def send_notification(request: NotificationRequest):
+    push_message = PushMessage(
+        to=request.token,
+        title=request.title,
+        body=request.body,
+        data=request.data or {},
+    )
 
     try:
-        if manager.get_ws(user["id"]):
-            user_meesage = mq.get_user_messages(user["id"])
+        # Send the notification
+        ticket = push_client.publish(push_message)
+        return {"status": "Success", "ticket": ticket}
 
-            if user_meesage != None:
-                for message in user_meesage:
-                    if message != None:
-                        message_status = await manager.personal_notification(message)
-                        print(message_status)
-                        # delete the message from the queue if successfully sent via WebSocket
-                        if message_status:
-                            mq.channel.basic_ack(delivery_tag=message["delivery_tag"])
-
-        hang = True
-        while hang:
-            try:
-                await asyncio.sleep(1)
-                await manager.ping(websocket)
-            except asyncio.exceptions.CancelledError:
-                break
-
-    except (WebSocketDisconnect, ConnectionClosedError, ConnectionClosedOK):
-        manager.disconnect(user["id"])
+    except Exception as e:
+        # Catch any broad exceptions and return as HTTP error
+        raise HTTPException(status_code=500, detail=str(e))

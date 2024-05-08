@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from app import oauth2
-from app.database import User
 from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from ..models import schemas
@@ -13,6 +12,7 @@ from app.controller.AuthController import AuthController
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
+from ..models.firebase_token_schemas import PushTokenSchema
 
 
 router = APIRouter()
@@ -27,6 +27,14 @@ REFRESH_TOKEN_EXPIRES_IN = settings.REFRESH_TOKEN_EXPIRES_IN
 )
 async def register(payload: schemas.CreateUserSchema):
     return AuthController.register_user(payload)
+
+
+@router.post(
+    "/push_token",
+    status_code=status.HTTP_201_CREATED,
+)
+def get_push_token(payload: PushTokenSchema, user: dict = Depends(require_user)):
+    return AuthController.get_push_token(payload, user)
 
 
 @router.post("/login")

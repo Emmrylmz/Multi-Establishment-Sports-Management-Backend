@@ -1,19 +1,15 @@
 from bson import ObjectId
 from pymongo.collection import Collection
 from datetime import datetime
-from app.database import Event  # Assuming 'Event' is your MongoDB collection
 from app.serializers.eventSerializers import eventEntity
 from .MongoDBService import MongoDBService
+from ..config import settings
+from ..database import Event
 
 
 class EventService(MongoDBService):
-    def __init__(self, collection: Collection):
+    def __init__(self, collection: str):
         super().__init__(collection)
-
-    async def create(self, data: dict):
-        # Add any event-specific logic before creating an event
-        print("Additional logic before creating an event")
-        return await super().create(data)
 
     # async def list_events(self, team_id: dict):
     #     query = {"team_id": team_id}
@@ -31,3 +27,6 @@ class EventService(MongoDBService):
     # Add event-specific methods if necessary
     def get_upcoming_events(self):
         return self.list({"start_date": {"$gte": datetime.utcnow()}})
+
+
+event_service = EventService(Event)

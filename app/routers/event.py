@@ -6,7 +6,10 @@ from ..models.event_schemas import CreateEventSchema
 from ..oauth2 import require_user
 from ..service.EventService import EventService
 from bson import ObjectId
-
+from fastapi.encoders import jsonable_encoder
+from ..utils import JSONEncoder
+from bson import json_util
+import json
 
 event_controller = EventController()
 
@@ -18,7 +21,10 @@ router = APIRouter()
     status_code=status.HTTP_201_CREATED,
 )
 async def create_event(
-    payload: CreateEventSchema, request: Request, user: dict = Depends(require_user)
+    payload: CreateEventSchema,
+    request: Request,
+    user: dict = Depends(require_user),
+    response_model=CreateEventSchema,
 ):
     return await EventController.create_event(payload, request, user)
 

@@ -2,23 +2,32 @@ from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 from app.config import settings
-from app.routers import auth, user, notification, event, team
+from app.routers import auth, notification, event, team
 from app.tools.RabbitClient import RabbitClient
+from app.service.FirebaseService import FirebaseService
+from app.tools.ExponentServerSDK import PushMessage, push_client
 
 
 class FooApp(FastAPI):
-    def __init__(self, rabbit_url, *args, **kwargs):
+    def __init__(self, rabbit_url, firebase_cred_path, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.rabbit_client = RabbitClient(rabbit_url=rabbit_url)
-
-    @classmethod
-    def log_incoming_message(cls, message: dict):
-        """Method to do something meaningful with the incoming message"""
-        # logger.info("Here we got incoming message %s", message)
+        self.firebase_service = FirebaseService(firebase_cred_path)
 
 
+<<<<<<< HEAD
 url = "amqp://guest:guest@localhost:5672//"
 app = FooApp(rabbit_url=url)
+=======
+path = r"C:\Users\emmry\OneDrive\Masaüstü\DACKA-App\server\app-fastapi\app\service\firbaseKey.json"
+
+url = "amqp://guest:guest@localhost:5672//"
+app = FooApp(
+    rabbit_url=url,
+    firebase_cred_path=path,
+    database_uri=settings.DATABASE_URL,
+)
+>>>>>>> 23d66e1 (from rabbit mq queue to expo notification service)
 
 # CORS setup
 origins = ["*"]
@@ -30,54 +39,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Static files for documentation and other purposes
-# app.mount("/static", StaticFiles(directory="path/to/static"), name="static")
 
-# Connection Manager for WebSocket
-# manager = ConnectionManager()
-
-# RabbitMQ Client Setup
-# rabbit_client = RabbitClient(
-#     rabbit_url=url,
-#     service="notification",
-#     # incoming_message_handler=your_message_handler_function  # Define this function to handle incoming messages
-# )
-# Include routers for authentication and user management
 app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
-app.include_router(user.router, tags=["Users"], prefix="/api/users")
-app.include_router(notification.trigger)
+app.include_router(notification.router)
 app.include_router(event.router, tags=["events"], prefix="/api/events")
 app.include_router(team.router, tags=["teams"], prefix="/api/teams")
 #     notifications.router, tags=["Notifications"], prefix="/api/notifications"
 # )
 
 
-# WebSocket Endpoint for real-time notifications
-# @app.websocket("/ws/{user_id}")
-# async def websocket_endpoint(websocket: WebSocket, user_id: int):
-#     await manager.connect(websocket, user_id)
-#     try:
-#         while True:
-#             data = await websocket.receive_text()
-#             await manager.send_personal_message({"user_id": user_id, "message": data})
-#     except Exception as e:
-#         print(e)
-#     finally:
-#         await manager.disconnect(user_id)
-
-
 # Startup and Shutdown Events
 @app.on_event("startup")
 async def startup_event():
+
     # Connect to RabbitMQ
     # app.pika_client = PikaClient()  # Ensure you initialize this correctly
-
+    app.firebase_service.init_firebase()
     await app.rabbit_client.start()
+<<<<<<< HEAD
 <<<<<<< HEAD
     print("RabbitMQ connection started.")
     # await rabbit_client.start_subscription()
 =======
 >>>>>>> f801e6c (latest)
+=======
+    await app.rabbit_client.start_subscription("emir")
+>>>>>>> 23d66e1 (from rabbit mq queue to expo notification service)
 
 
 @app.on_event("shutdown")
