@@ -21,7 +21,7 @@ class CreateUserSchema(BaseModel):
     password: constr(min_length=8)
     passwordConfirm: str
     name: str
-    photo: Optional[str] = None
+    photo: Optional[str] = (None,)
     role: Literal["Coach", "Player", "Manager"] = "Player"
     contact_info: Optional[ContactInfo] = None
     family_contacts: Optional[List[ContactPerson]] = []

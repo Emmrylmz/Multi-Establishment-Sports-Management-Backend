@@ -1,8 +1,5 @@
-# BUILTIN modules
 import asyncio
 from typing import Callable, Optional, Any
-
-# Third party modules
 import json
 from aio_pika.exceptions import AMQPConnectionError
 from aio_pika import (
@@ -14,10 +11,15 @@ from aio_pika import (
 )
 from ..config import settings
 from bson import json_util
+import logging
+from ..tools.ExponentServerSDK import push_client, PushMessage
 
 
-# -----------------------------------------------------------------------------
-#
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+
 class RabbitClient:
     """This class implements RabbitMQ Publish and Subscribe async handling.
 
@@ -39,7 +41,7 @@ class RabbitClient:
         self,
         rabbit_url: str,
         service: Optional[str] = None,
-        incoming_message_handler: Optional[Callable] = None,
+        callback: Optional[Callable] = None,
     ):
         """The class initializer.
 
@@ -51,19 +53,47 @@ class RabbitClient:
         self.connection = None
         self.rabbit_url = rabbit_url
         self.service_name = service
-        self.message_handler = incoming_message_handler
+        self.message_handler = self._process_incoming_message
 
     # ---------------------------------------------------------
     #
-    async def _process_incoming_message(self, message: IncomingMessage):
+    def _process_incoming_message(self, message: IncomingMessage):
         """Processing an incoming message from RabbitMQ.
 
         :param message: The received message.
         """
-        if body := message.body:
-            await self.message_handler(json.loads(body))
+        logging.debug("Starting message processing")
+        try:
+            message_body = message.body.decode()  # Decode bytes to string
+            data = json.loads(message_body)  # Parse JSON string to dictionary
 
-        await message.ack()
+            logging.debug(f"Received the message: {data}")
+            self.handle_push_notification(data)
+        except json.JSONDecodeError as e:
+            logging.error(
+                f"JSON decode error: {e} - Message Body: {message.body.decode()}"
+            )
+        except Exception as e:
+            logging.error(f"Failed to process message: {str(e)}")
+
+    def handle_push_notification(self, data):
+        # Here you'd use the details from `data` to create your push message
+        logging.debug(f"Received data for push notification: {data}")
+
+        push_message = PushMessage(
+            to="ExponentPushToken[6Nn4MnPCDEj77x1HHAiKdg]",
+            title="New Message From Your Coach !!",
+            body="Check it out that",
+            data={"message": data},
+        )
+        try:
+            # Send the notification
+            ticket = push_client.publish(push_message)
+            return {"status": "Success", "ticket": ticket}
+
+        except Exception as e:
+            # Catch any broad exceptions and return as HTTP error
+            logging.error(f"Failed to process message: {str(e)}")
 
     # ---------------------------------------------------------
     #
@@ -102,7 +132,7 @@ class RabbitClient:
         self.channel = await self.connection.channel()
 
         # To make sure the load is evenly distributed between the workers.
-        await self.channel.set_qos(1)
+        await self.channel.set_qos(prefetch_count=100)
 
     # ---------------------------------------------------------
     #
@@ -113,10 +143,11 @@ class RabbitClient:
         queue = await self.channel.declare_queue(name=queue_name, durable=True)
 
         # Start consuming existing and future messages.
-        await queue.consume(self._process_incoming_message, no_ack=False)
+        await queue.consume(self._process_incoming_message, no_ack=True)
 
     # ---------------------------------------------------------
     #
+
     async def publish_message(self, queue: str, message: dict):
         """Publish a message on specified RabbitMQ queue asynchronously.
 
@@ -124,15 +155,21 @@ class RabbitClient:
         :param message: Message to be published.
         """
 
-        # Create a message and publish it.
-        message_body = Message(
-            content_type="application/json",
-            delivery_mode=DeliveryMode.PERSISTENT,
-            body=json.dumps(message, indent=4, sort_keys=True, default=str).encode(),
-        )
-        await self.channel.default_exchange.publish(
-            routing_key=queue, message=message_body
-        )
+        try:
+            message_body = Message(
+                content_type="application/json",
+                delivery_mode=DeliveryMode.PERSISTENT,
+                body=json.dumps(
+                    message, indent=4, sort_keys=True, default=str
+                ).encode(),
+            )
+            await self.channel.default_exchange.publish(
+                routing_key=queue, message=message_body
+            )
+            logging.info(f"Message published to {queue}")
+        except Exception as e:
+            logging.error(f"Failed to publish message to {queue}: {e}")
+            raise
 
     # ---------------------------------------------------------
     #

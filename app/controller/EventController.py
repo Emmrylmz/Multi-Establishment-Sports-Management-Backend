@@ -1,18 +1,13 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
-from ..database import Event, User
 from app.service.EventService import EventService
 from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
-from ..service.UserService import UserService
-import boto3
-
+from ..service.UserService import user_service
+from ..service.EventService import event_service
 
 # from ...main import rabbit_client
-
-
-event_service = EventService(Event)
 
 
 class EventController:
@@ -22,13 +17,13 @@ class EventController:
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
-        UserService.validate_role(user, "Coach")
+        user_service.validate_role(user=user, role="Coach")
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
-        event_data["creator_id"] = user["id"]
+        event_data["creator_id"] = user["_id"]
 
         # Call to your service layer to save the event
-        created_event = await event_service.create(event_data)
+        created_event = event_service.create(event_data)
         if not created_event:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_BAD_REQUEST,
@@ -36,7 +31,8 @@ class EventController:
             )
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
         await app.rabbit_client.publish_message(
-            queue="team123", message={"message": event_data}
+            queue=event_data["team_id"],
+            message=event,
         )
         return created_event
 

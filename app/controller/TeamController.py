@@ -13,11 +13,8 @@ from datetime import datetime, timedelta
 from app.config import settings
 from app import utils
 from ..oauth2 import require_user
-from ..service.TeamService import TeamService
-from ..service.UserService import UserService
-from ..database import Team
-
-team_service = TeamService(Team)
+from ..service.TeamService import team_service
+from ..service.UserService import user_service
 
 
 class TeamController:
@@ -29,16 +26,18 @@ class TeamController:
     ):
 
         app = request.app
-        UserService.validate_role(user, "Coach")
+        user_service.validate_role(user, "Coach")
         team_data = team_payload.dict()
-        created_team = await team_service.create(team_data)
+        created_team = team_service.create(team_data)
         if not created_team:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_BAD_REQUEST,
                 detail="Could not create team",
             )
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
-        await app.rabbit_client.start_subscription(queue_name=team_data["team_id"])
+        await app.rabbit_client.start_subscription(
+            queue_name=str(created_team["team_name"])
+        )
         return created_team
 
     # @staticmethod
