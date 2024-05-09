@@ -29,7 +29,7 @@ class UserService(MongoDBService):
 
         return userEntity(user)
 
-    async def validate_role(self, user, role):
+    def validate_role(self, user, role):
         # Check if the user object is None
         if user is None:
             raise ValueError("No user data available to validate role")
@@ -37,6 +37,19 @@ class UserService(MongoDBService):
         # Now check the role
         if user.get("role") != role:
             raise ValueError(f"User role does not match required role: {role}")
+
+    async def check_role(self, user_id):
+        # Check if the user object is None
+        user = await self.get_by_id(ObjectId(user_id))
+        if user is None:
+            raise ValueError("No user data available to validate role")
+
+        # Now check the role
+        return user.get("role")
+
+    async def insert_team(self, team_id):
+
+        return
 
 
 user_service = UserService(User)

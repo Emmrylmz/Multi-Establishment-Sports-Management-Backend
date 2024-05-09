@@ -37,8 +37,8 @@ class MongoDBService:
 
     async def list(self, query: dict) -> list:
         """Lists documents based on a query asynchronously."""
-        # jsonable_encoder(query)  # Optionally process query for JSON encoding
-        cursor = await self.collection.find(query)
+        jsonable_encoder(query)  # Optionally process query for JSON encoding
+        cursor = self.collection.find(query)
         documents = await cursor.to_list(length=None)  # Fetch all documents from cursor
         return documents
 

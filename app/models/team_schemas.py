@@ -34,3 +34,12 @@ class PlayerTokenRequest(BaseModel):
     class Config:
         orm_mode = True
         fields = {"id": "_id"}
+
+
+class UserInsert(BaseModel):
+    team_id: str
+    user_id: str
+
+    class Config:
+        orm_mode = True
+        fields = {"id": "_id"}

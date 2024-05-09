@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, Request
 from typing import List
 from ..oauth2 import require_user
-from ..models.team_schemas import CreateTeamSchema, PlayerTokenRequest
+from ..models.team_schemas import CreateTeamSchema, PlayerTokenRequest, UserInsert
 from ..controller.TeamController import TeamController
 from ..service.TokenService import push_token_service
 from ..service.TeamService import team_service
+from bson import ObjectId
 
 router = APIRouter()
 
@@ -21,6 +22,13 @@ async def create_team(
 #     return await team_service.get_by_id(team_id)
 
 
-@router.post("/get_token")  # Assuming it returns a list of tokens
+@router.post("/get_token")
 async def get_tokens(request: PlayerTokenRequest):
     return await push_token_service.get_team_player_tokens(team_id=request.team_id)
+
+
+@router.post("/insert_user")
+async def insert_user(request: UserInsert):
+    return await TeamController.add_user_to_team(
+        team_id=request.team_id, user_id=request.user_id
+    )
