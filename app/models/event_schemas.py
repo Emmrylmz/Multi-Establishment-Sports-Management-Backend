@@ -1,7 +1,19 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, Literal
-from bson import ObjectId
+from bson.objectid import ObjectId
+import struct
+import pydantic
+
+
+class BeeObjectId(ObjectId):
+    # fix for FastApi/docs
+    _origin_ = pydantic.typing.Literal
+    _args_ = (str,)
+
+
+pydantic.json.ENCODERS_BY_TYPE[ObjectId] = str
+pydantic.json.ENCODERS_BY_TYPE[BeeObjectId] = str
 
 
 class CreateEventSchema(BaseModel):
@@ -15,6 +27,7 @@ class CreateEventSchema(BaseModel):
 
     class Config:
         orm_mode = True
+        fields = {"id": "_id"}
 
 
 class CreateGameEventSchema(CreateEventSchema):

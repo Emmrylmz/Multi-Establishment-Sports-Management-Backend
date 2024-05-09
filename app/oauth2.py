@@ -5,7 +5,7 @@ from fastapi_jwt_auth import AuthJWT
 from pydantic import BaseModel
 from bson.objectid import ObjectId
 from fastapi_jwt_auth.exceptions import AuthJWTException
-from app.service.UserService import UserService
+from app.service.UserService import UserService, user_service
 
 
 from app.serializers.userSerializer import userEntity
@@ -45,11 +45,11 @@ class UserNotFound(Exception):
     pass
 
 
-def require_user(Authorize: AuthJWT = Depends()):
+async def require_user(Authorize: AuthJWT = Depends()):
     try:
         Authorize.jwt_required()
         user_id = Authorize.get_jwt_subject()
-        user = UserService.get_user_by_id(user_id)
+        user = await user_service.get_by_id(user_id)
 
         if not user:
             raise UserNotFound("User no longer exists")

@@ -1,35 +1,40 @@
 # app/services/user_service.py
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 from app.database import User
 from app.serializers.userSerializer import userEntity, userResponseEntity
+from app.service.MongoDBService import MongoDBService
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
 import logging
+from pymongo.collection import Collection
+from ..database import User
 
 logging.basicConfig(level=logging.DEBUG)
 
 
-class UserService:
+class UserService(MongoDBService):
+    def __init__(self, collection: Collection):
+        super().__init__(collection=collection)
 
+    async def check_user_exists(self, email: str):
+
+        return await self.collection.find_one({"email": email.lower()})
+
+    async def verify_user_credentials(self, email: str, password: str):
+
+        user = await self.collection.find_one({"email": email.lower()})
+        jls_extract_var = user
+        if not user or not utils.verify_password(password, jls_extract_var["password"]):
+
+            return None
+
+        return userEntity(user)
+    
     @staticmethod
-    def check_user_exists(email: str):
+    async def verify_user_credentials(email: str, password: str):
 
-        return User.find_one({"email": email.lower()})
-
-    @staticmethod
-    def create_user(user_data: dict):
-
-        user_data["created_at"] = datetime.utcnow()
-
-        result = User.insert_one(user_data)
-
-        return User.find_one({"_id": result.inserted_id})
-
-    @staticmethod
-    def verify_user_credentials(email: str, password: str):
-
-        user = User.find_one({"email": email.lower()})
+        user = await User.find_one({"email": email.lower()})
         jls_extract_var = user
         if not user or not utils.verify_password(password, jls_extract_var["password"]):
 
@@ -37,25 +42,15 @@ class UserService:
 
         return userEntity(user)
 
-    @staticmethod
-    def get_user_by_id(user_id: str):
-
-        return userEntity(User.find_one({"_id": ObjectId(user_id)}))
-
-    @staticmethod
-    def update_user_login(user_id: str, access_token: str, refresh_token: str):
-
-        # Here you can update any login related fields in the user model if necessary
-        pass
-
-    @staticmethod
-    def validate_role(user: dict, role: "Coach"):
+    def validate_role(self, user: dict, role: "Coach"):
         if user.get("role") != role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"{role} user not verified",
             )
 
+
+user_service = UserService(User)
     # @staticmethod
     # def get_current_user(token: str = Depends(user_service.get_current_user_token)):
     #     """

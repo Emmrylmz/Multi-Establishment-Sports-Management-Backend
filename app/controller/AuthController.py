@@ -1,18 +1,24 @@
 # app/controllers/auth_controller.py
 
 from fastapi import HTTPException, status
+from app.service.TeamService import TeamService
 from app.service.UserService import UserService
 from ..models import schemas
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from datetime import datetime, timedelta
 from app.config import settings
 from app import utils
+from ..database import Team
+from ..database import User
+
+team_service = TeamService(Team)
+user_service = UserService(User)
 
 
 class AuthController:
     @staticmethod
-    def register_user(create_user_schema: schemas.CreateUserSchema):
-        if UserService.check_user_exists(create_user_schema.email):
+    async def register_user(create_user_schema: schemas.CreateUserSchema):
+        if await user_service.check_user_exists(create_user_schema.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="Account already exists"
             )
@@ -27,13 +33,19 @@ class AuthController:
         user_data["password"] = hashed_password
         user_data.pop("passwordConfirm", None)
 
-        new_user = UserService.create_user(user_data)
+        new_user = await user_service.create(user_data)
+        print(new_user)
+        
+        if user_data.get("role") == "Player" and "teams" in user_data:
+            for team_id in user_data["teams"]:
+                await team_service.add_player_to_team(team_id=team_id, player_name=user_data["name"])
+        
         user_dict = {k: v for k, v in new_user.items() if k != "password"}
         return {"status": "success", "user": user_dict}
 
     @staticmethod
-    def login_user(login_user_schema: schemas.LoginUserSchema, Authorize):
-        user = UserService.verify_user_credentials(
+    async def login_user(login_user_schema: schemas.LoginUserSchema, Authorize):
+        user = await user_service.verify_user_credentials(
             login_user_schema.email, login_user_schema.password
         )
         if not user:
@@ -51,7 +63,7 @@ class AuthController:
             expires_time=timedelta(minutes=settings.REFRESH_TOKEN_EXPIRES_IN),
         )
 
-        UserService.update_user_login(user, access_token, refresh_token)
+        # await user_service.update_user_login(user, access_token, refresh_token)
 
         return {
             "status": "success",
@@ -66,7 +78,7 @@ class AuthController:
         }
 
     # Similarly implement refresh_token and logout methods
-    def refresh_access_token(response: Response, Authorize):
+    async def refresh_access_token(response: Response, Authorize):
         try:
             Authorize.jwt_refresh_token_required()
             user_id = Authorize.get_jwt_subject()
@@ -75,7 +87,7 @@ class AuthController:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not refresh access token",
                 )
-            user = UserService.get_user_by_id(user_id)
+            user = await user_service.get_user_by_id(user_id)
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

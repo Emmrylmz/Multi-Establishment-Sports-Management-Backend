@@ -26,12 +26,12 @@ REFRESH_TOKEN_EXPIRES_IN = settings.REFRESH_TOKEN_EXPIRES_IN
     response_model=schemas.UserResponse,
 )
 async def register(payload: schemas.CreateUserSchema):
-    return AuthController.register_user(payload)
+    return await AuthController.register_user(payload)
 
 
 @router.post("/login")
-def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
-    return AuthController.login_user(payload, Authorize)
+async def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
+    return await AuthController.login_user(payload, Authorize)
 
 
 @router.post("/checkToken")
@@ -41,8 +41,8 @@ async def access_protected_resource(Authorize: AuthJWT = Depends(require_user)):
 
 
 @router.get("/refresh")
-def refresh_token(response: Response, Authorize: AuthJWT = Depends()):
-    return AuthController.refresh_access_token(response, Authorize)
+async def refresh_token(response: Response, Authorize: AuthJWT = Depends()):
+    return await AuthController.refresh_access_token(response, Authorize)
 
 
 @router.get("/logout", status_code=status.HTTP_200_OK)

@@ -1,8 +1,9 @@
 from pymongo import mongo_client
+from motor.motor_asyncio import AsyncIOMotorClient
 import pymongo
 from app.config import settings
 
-client = mongo_client.MongoClient(settings.DATABASE_URL, serverSelectionTimeoutMS=5000)
+client = AsyncIOMotorClient(settings.DATABASE_URL, serverSelectionTimeoutMS=5000)
 
 try:
     conn = client.server_info()
