@@ -39,3 +39,7 @@ class TeamController:
             queue_name=str(created_team["team_name"])
         )
         return created_team
+
+    async def add_user_to_team(team_id, user_id):
+        response = await team_service.insert_user(team_id=team_id, user_id=user_id)
+        return response

@@ -9,6 +9,7 @@ from ..service.TeamService import team_service
 import asyncio
 from typing import List
 from ..database import Push_Token
+from fastapi.encoders import jsonable_encoder
 
 
 class PushTokenService(MongoDBService):
@@ -18,22 +19,25 @@ class PushTokenService(MongoDBService):
     async def save_token(self, payload: PushTokenSchema, user_id: str):
         data = payload.dict()
         data["_id"] = ObjectId(user_id)
-        result = await self.collection.insert_one(data)
-        return result.inserted_id  #
+        result = await self.create(data)
+        return result.inserted_id
 
     async def get_team_player_tokens(self, team_id: str) -> List[str]:
         try:
-            # Assume get_by_id is an async function that fetches the team data
             team = await team_service.get_by_id(team_id)
+
             players_ids = team["team_players"]
 
-            # Query all players in one go using the `$in` operator
-            query = {"_id": {"$in": players_ids}}
-            players_data = await self.list(query=query)
+            object_ids = [ObjectId(id) for id in players_ids]
+
+            query = {"_id": {"$in": object_ids}}
+
+            documents = await self.list(query=query)
 
             # Extract tokens, ensuring each player has a token attribute
-            # tokens = [player["token"] for player in players_data if "token" in player]
-            return players_data
+            tokens = [player["token"] for player in documents if "token" in player]
+
+            return tokens
         except Exception as e:
             # Handle possible exceptions
             print(f"An error occurred: {e}")
