@@ -16,8 +16,11 @@ class UserService(MongoDBService):
         super().__init__(collection=collection)
 
     async def check_user_exists(self, email: str):
-
-        return await self.collection.find_one({"email": email.lower()})
+        response = await self.collection.find_one({"email": email.lower()})
+        if response:
+            return response
+        else:
+            return None
 
     async def verify_user_credentials(self, email: str, password: str):
 

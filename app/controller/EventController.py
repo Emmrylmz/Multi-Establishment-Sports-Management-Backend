@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
-from app.service.EventService import EventService
 from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId

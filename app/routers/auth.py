@@ -24,10 +24,9 @@ REFRESH_TOKEN_EXPIRES_IN = settings.REFRESH_TOKEN_EXPIRES_IN
 @router.post(
     "/register",
     status_code=status.HTTP_201_CREATED,
-    response_model=schemas.UserResponse,
 )
 async def register(payload: schemas.CreateUserSchema):
-    return AuthController.register_user(payload)
+    return await AuthController.register_user(payload)
 
 
 @router.post(

@@ -11,27 +11,38 @@ from app.service.TokenService import push_token_service
 from ..oauth2 import require_user
 from ..models.firebase_token_schemas import PushTokenSchema
 from bson import ObjectId
+from ..service.TeamService import team_service
 
 
 class AuthController:
     @staticmethod
-    def register_user(create_user_schema: schemas.CreateUserSchema):
-        if user_service.check_user_exists(create_user_schema.email):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="Account already exists"
-            )
+    async def register_user(create_user_schema: schemas.CreateUserSchema):
+        # if user_service.check_user_exists(create_user_schema.email):
+        #     raise HTTPException(
+        #         status_code=status.HTTP_409_CONFLICT, detail="Account already exists"
+        #     )
 
-        if create_user_schema.password != create_user_schema.passwordConfirm:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match"
-            )
+        # if create_user_schema.password != create_user_schema.passwordConfirm:
+        #     raise HTTPException(
+        #         status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match"
+        #     )
 
         user_data = create_user_schema.dict(exclude_none=False)
         hashed_password = utils.hash_password(user_data["password"])
         user_data["password"] = hashed_password
         user_data.pop("passwordConfirm", None)
-        new_user = user_service.create_user(user_data)
+        new_user = await user_service.create(user_data)
         user_dict = {k: v for k, v in new_user.items() if k != "password"}
+
+        user = user_dict["_id"]
+        user_id = utils.ensure_object_id(user)
+        team_ids = user_dict["teams"]
+        team_ids = [utils.ensure_object_id(team_id) for team_id in team_ids]
+        await team_service.add_single_user_to_team(
+            user_id=user_id,
+            team_ids=team_ids,
+            user_role_field="team_players",
+        )
         return {"status": "success", "user": user_dict}
 
     @staticmethod

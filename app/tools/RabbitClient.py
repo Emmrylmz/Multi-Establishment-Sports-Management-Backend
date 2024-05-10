@@ -16,6 +16,7 @@ from ..tools.ExponentServerSDK import push_client, PushMessage
 import aio_pika
 from datetime import datetime
 from ..utils import DateTimeEncoder
+from ..service.TokenService import push_token_service
 
 
 logging.basicConfig(
@@ -84,7 +85,7 @@ class RabbitClient:
     def handle_push_notification(self, data):
         # Here you'd use the details from `data` to create your push message
         logging.debug(f"Received data for push notification: {data}")
-
+        push_token_service.get_team_player_tokens(data["team_id"])
         push_message = PushMessage(
             to="ExponentPushToken[6Nn4MnPCDEj77x1HHAiKdg]",
             title="New Message From Your Coach !!",
@@ -197,10 +198,10 @@ class RabbitClient:
         await self.exchange.publish(msg, routing_key=routing_key)
         logging.info(f"Message published to {routing_key}")
 
-    async def start_consumer(self, queue_name: str, callback):
+    async def start_consumer(self, queue_name: str):
         """Start consuming messages from a specified queue."""
         queue = await self.channel.get_queue(queue_name)
-        await queue.consume(callback)
+        await queue.consume(self._process_incoming_message)
         logging.info(f"Started consuming from {queue_name}")
 
     # ---------------------------------------------------------

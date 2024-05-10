@@ -43,5 +43,11 @@ class TeamService(MongoDBService):
             {"$addToSet": {user_role_field: {"$each": user_ids}}},
         )
 
+    async def add_single_user_to_team(self, user_id, team_ids, user_role_field):
+        teams_update_result = await self.collection.update_many(
+            {"_id": {"$in": team_ids}},
+            {"$addToSet": {user_role_field: user_id}},
+        )
+
 
 team_service = TeamService(Team)
