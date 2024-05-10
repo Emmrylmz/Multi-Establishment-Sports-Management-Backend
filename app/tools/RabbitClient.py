@@ -184,12 +184,16 @@ class RabbitClient:
 
     async def publish_message(self, routing_key: str, message: dict):
         """Publish a message with specific routing keys."""
-        if hasattr(message, "dict"):
-            message = message.dict()
-        body = json.dumps(message, cls=DateTimeEncoder).encode()
+        # if hasattr(message, "dict"):
+        #     message = message.dict()
+
+        body = json.dumps(message, indent=4, sort_keys=True, default=str).encode()
         msg = Message(
-            body, content_type="application/json", delivery_mode=DeliveryMode.PERSISTENT
+            body,
+            content_type="application/json",
+            delivery_mode=DeliveryMode.PERSISTENT,
         )
+
         await self.exchange.publish(msg, routing_key=routing_key)
         logging.info(f"Message published to {routing_key}")
 

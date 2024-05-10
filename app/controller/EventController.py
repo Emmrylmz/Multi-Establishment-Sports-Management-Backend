@@ -36,9 +36,8 @@ class EventController:
         event_response = (
             created_event.dict() if hasattr(created_event, "dict") else created_event
         )
-
         # Publishing a message to RabbitMQ asynchronously
-        await request.app.rabbit_client.publish_message(
+        await app.rabbit_client.publish_message(
             routing_key=f"team.{event_data['team_id']}.event.created",
             message={"event": event, "action": "created"},
         )
