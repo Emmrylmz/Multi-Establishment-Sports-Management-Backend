@@ -38,7 +38,7 @@ class TeamController:
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
         team_id = created_team["team_id"]
         await app.rabbit_client.declare_and_bind_queue(
-            queue_name=f"team_{team_id}_events",
+            queue_name=f"{team_id}",
             routing_keys=[f"team.{team_id}.event.*"],
         )
         return created_team

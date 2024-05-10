@@ -29,15 +29,13 @@ class CreateEventSchema(BaseModel):
         orm_mode = True
         json_encoders = {datetime: lambda dt: dt.isoformat()}
         schema_extra = {
-            "example": {
-                "event_type": "Game",
-                "creator_id": "creator123",
-                "place": "Stadium XYZ",
-                "event_date": "2023-05-10T15:00:00",
-                "created_at": "2023-05-01T12:34:56",
-                "team_id": "team456",
-                "description": "Annual championship game",
-            }
+            "event_type": "Game",
+            "creator_id": "creator123",
+            "place": "Stadium XYZ",
+            "event_date": "2023-05-10T15:00:00",
+            "created_at": "2023-05-01T12:34:56",
+            "team_id": "team456",
+            "description": "Annual championship game",
         }
 
     @property

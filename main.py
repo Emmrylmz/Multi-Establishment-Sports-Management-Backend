@@ -52,7 +52,7 @@ async def startup_event():
     # app.pika_client = PikaClient()  # Ensure you initialize this correctly
     app.firebase_service.init_firebase()
     await app.rabbit_client.start()
-    # await app.rabbit_client.start_subscription("emir")
+    await app.rabbit_client.start_consumer("asdasddassssx")
 
 
 @app.on_event("shutdown")

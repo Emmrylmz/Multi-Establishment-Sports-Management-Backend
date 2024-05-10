@@ -26,18 +26,22 @@ class PushTokenService(MongoDBService):
         try:
             team = await team_service.get_by_id(team_id)
 
-            players_ids = team["team_players"]
+            if team:
 
-            object_ids = [ObjectId(id) for id in players_ids]
+                players_ids = team["team_players"]
 
-            query = {"_id": {"$in": object_ids}}
+                object_ids = [ObjectId(id) for id in players_ids]
 
-            documents = await self.list(query=query)
+                query = {"_id": {"$in": object_ids}}
 
-            # Extract tokens, ensuring each player has a token attribute
-            tokens = [player["token"] for player in documents if "token" in player]
+                documents = await self.list(query=query)
 
-            return tokens
+                # Extract tokens, ensuring each player has a token attribute
+                tokens = [player["token"] for player in documents if "token" in player]
+
+                return tokens
+            else:
+                return {"team not found"}
         except Exception as e:
             # Handle possible exceptions
             print(f"An error occurred: {e}")
