@@ -13,13 +13,13 @@ router = APIRouter()
 
 @router.post(
     "/create",
+    response_model=CreateEventSchema,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_event(
     payload: CreateEventSchema,
     request: Request,
-    user: dict = Depends(require_user),
-    response_model=CreateEventSchema,
+    user: dict = Depends(require_user)
 ):
     return await EventController.create_event(payload, request, user)
 

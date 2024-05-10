@@ -15,7 +15,7 @@ class FooApp(FastAPI):
         self.firebase_service = FirebaseService(firebase_cred_path)
 
 
-path = r"C:\Users\emmry\OneDrive\Masaüstü\DACKA-App\server\app-fastapi\app\service\firbaseKey.json"
+path = r"/Users/stannisozbov/Documents/pearl/AirballAI/APP/app-fastapi/app/service/firbaseKey.json"
 
 url = "amqp://guest:guest@localhost:5672//"
 

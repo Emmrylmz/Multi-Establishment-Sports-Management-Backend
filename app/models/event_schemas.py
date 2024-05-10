@@ -6,24 +6,24 @@ import struct
 import pydantic
 
 
-# class BeeObjectId(ObjectId):
-#     # fix for FastApi/docs
-#     __origin__ = pydantic.typing.Literal
-#     __args__ = (str,)
+class BeeObjectId(ObjectId):
+    # fix for FastApi/docs
+    __origin__ = pydantic.typing.Literal
+    __args__ = (str,)
 
 
-# pydantic.json.ENCODERS_BY_TYPE[ObjectId] = str
-# pydantic.json.ENCODERS_BY_TYPE[BeeObjectId] = str
+pydantic.json.ENCODERS_BY_TYPE[ObjectId] = str
+pydantic.json.ENCODERS_BY_TYPE[BeeObjectId] = str
 
 
 class CreateEventSchema(BaseModel):
     event_type: Literal["Game", "Training"]
     creator_id: str
     place: str
-    # event_date: datetime
-    # created_at: datetime
+    event_date: datetime  # corrected from event_data
+    created_at: datetime = Field(default_factory=datetime.now)
     team_id: str
-    description: Optional[str] = None
+    description: Optional[str]
 
     class Config:
         orm_mode = True
