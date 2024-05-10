@@ -13,6 +13,9 @@ from ..config import settings
 from bson import json_util
 import logging
 from ..tools.ExponentServerSDK import push_client, PushMessage
+import aio_pika
+from datetime import datetime
+from ..utils import DateTimeEncoder
 
 
 logging.basicConfig(
@@ -41,6 +44,7 @@ class RabbitClient:
         self,
         rabbit_url: str,
         service: Optional[str] = None,
+        exchange_name: str = "notifications_exchange12",
     ):
         """The class initializer.
 
@@ -53,6 +57,8 @@ class RabbitClient:
         self.rabbit_url = rabbit_url
         self.service_name = service
         self.message_handler = self._process_incoming_message
+        self.exchange = None
+        self.exchange_name = exchange_name
 
     # ---------------------------------------------------------
     #
@@ -117,58 +123,81 @@ class RabbitClient:
     #
     async def _initiate_communication(self):
         """Establish communication with RabbitMQ (connection + channel).
-
         Send a LinkUp message when communication is established.
         """
         loop = asyncio.get_running_loop()
 
         # Create a RabbitMQ connection that automatically reconnects.
         self.connection = await connect_robust(loop=loop, url=self.rabbit_url)
+
+        # Set reconnection and closure callbacks.
         self.connection.reconnect_callbacks.add(self._on_connection_reconnected)
         self.connection.close_callbacks.add(self._on_connection_closed)
 
-        # Create a publishing, or subscription channel.
+        # Establish a channel.
         self.channel = await self.connection.channel()
 
-        # To make sure the load is evenly distributed between the workers.
+        # Declare the exchange using the newly established channel.
+        self.exchange = await self.channel.declare_exchange(
+            self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+        )
+
+        # Set Quality of Service for the channel.
         await self.channel.set_qos(prefetch_count=1)
 
     # ---------------------------------------------------------
-    #
-    async def start_subscription(self, queue_name: str):
-        """Setup message listener with the current running asyncio loop."""
-
-        # Creating a receive queue.
-        queue = await self.channel.declare_queue(name=queue_name, durable=True)
-
-        # Start consuming existing and future messages.
-        await queue.consume(self._process_incoming_message, no_ack=True)
 
     # ---------------------------------------------------------
     #
 
-    async def publish_message(self, queue: str, message: dict):
-        """Publish a message on specified RabbitMQ queue asynchronously.
+    # async def publish_message(self, queue: str, message: dict):
+    #     """Publish a message on specified RabbitMQ queue asynchronously.
 
-        :param queue: Publishing queue.
-        :param message: Message to be published.
-        """
+    #     :param queue: Publishing queue.
+    #     :param message: Message to be published.
+    #     """
 
-        try:
-            message_body = Message(
-                content_type="application/json",
-                delivery_mode=DeliveryMode.PERSISTENT,
-                body=json.dumps(
-                    message, indent=4, sort_keys=True, default=str
-                ).encode(),
-            )
-            await self.channel.default_exchange.publish(
-                routing_key=queue, message=message_body
-            )
-            logging.info(f"Message published to {queue}")
-        except Exception as e:
-            logging.error(f"Failed to publish message to {queue}: {e}")
-            raise
+    #     try:
+    #         message_body = Message(
+    #             content_type="application/json",
+    #             delivery_mode=DeliveryMode.PERSISTENT,
+    #             body=json.dumps(
+    #                 message, indent=4, sort_keys=True, default=str
+    #             ).encode(),
+    #         )
+    #         await self.channel.default_exchange.publish(
+    #             routing_key=queue, message=message_body
+    #         )
+    #         logging.info(f"Message published to {queue}")
+    #     except Exception as e:
+    #         logging.error(f"Failed to publish message to {queue}: {e}")
+    #         raise
+
+    async def declare_and_bind_queue(self, queue_name: str, routing_keys: list):
+        """Declare a new queue and bind it with specific routing keys."""
+        queue = await self.channel.declare_queue(queue_name, durable=True)
+        for routing_key in routing_keys:
+            await queue.bind(self.exchange, routing_key=routing_key)
+        logging.info(
+            f"Queue {queue_name} declared and bound with routing keys: {routing_keys}"
+        )
+
+    async def publish_message(self, routing_key: str, message: dict):
+        """Publish a message with specific routing keys."""
+        if hasattr(message, "dict"):
+            message = message.dict()
+        body = json.dumps(message, cls=DateTimeEncoder).encode()
+        msg = Message(
+            body, content_type="application/json", delivery_mode=DeliveryMode.PERSISTENT
+        )
+        await self.exchange.publish(msg, routing_key=routing_key)
+        logging.info(f"Message published to {routing_key}")
+
+    async def start_consumer(self, queue_name: str, callback):
+        """Start consuming messages from a specified queue."""
+        queue = await self.channel.get_queue(queue_name)
+        await queue.consume(callback)
+        logging.info(f"Started consuming from {queue_name}")
 
     # ---------------------------------------------------------
     #

@@ -23,19 +23,7 @@ class TeamService(MongoDBService):
     def get_upcoming_events(self):
         return self.list({"start_date": {"$gte": datetime.utcnow()}})
 
-    async def insert_user(self, team_id, user_id):
-        # Ensure team_id and user_id are ObjectIds
-        team_id = ObjectId(team_id) if not isinstance(team_id, ObjectId) else team_id
-        user_id = ObjectId(user_id) if not isinstance(user_id, ObjectId) else user_id
-
-        # Fetch the team document
-        team = await self.get_by_id(team_id)
-        print("Team fetched:", team)
-
-        # Determine the appropriate array based on user role
-        role = await user_service.check_role(user_id=user_id)
-        array = "team_players" if role == "Player" else "team_coaches"
-        print("Updating array:", array)
+    async def insert_user(self, team_id, user_id, to_array):
 
         # Perform the update operation
         res = await self.collection.update_one(
@@ -48,6 +36,12 @@ class TeamService(MongoDBService):
             return "User added successfully"
         else:
             return "No changes made"
+
+    async def add_users_to_teams(self, user_ids, team_ids, user_role_field):
+        teams_update_result = await self.collection.update_many(
+            {"_id": {"$in": team_ids}},
+            {"$addToSet": {user_role_field: {"$each": user_ids}}},
+        )
 
 
 team_service = TeamService(Team)

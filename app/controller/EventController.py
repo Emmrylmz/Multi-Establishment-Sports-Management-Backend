@@ -6,6 +6,7 @@ from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
 from ..service.UserService import user_service
 from ..service.EventService import event_service
+from ..utils import DateTimeEncoder
 
 # from ...main import rabbit_client
 
@@ -17,7 +18,7 @@ class EventController:
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
-        await user_service.validate_role(user=user, role="Coach")
+        user_service.validate_role(user=user, role="Coach")
 
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
@@ -37,11 +38,10 @@ class EventController:
         )
 
         # Publishing a message to RabbitMQ asynchronously
-        await app.rabbit_client.publish_message(
-            queue=event_data["team_id"],
-            message=event_response,  # Ensure this is serializable or serialized
+        await request.app.rabbit_client.publish_message(
+            routing_key=f"team.{event_data['team_id']}.event.created",
+            message={"event": event, "action": "created"},
         )
-
         return event_response
 
     @staticmethod

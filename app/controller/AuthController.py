@@ -25,6 +25,7 @@ class AuthController:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match"
             )
+
         user_data = create_user_schema.dict(exclude_none=False)
         hashed_password = utils.hash_password(user_data["password"])
         user_data["password"] = hashed_password

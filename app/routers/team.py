@@ -27,8 +27,8 @@ async def get_tokens(request: PlayerTokenRequest):
     return await push_token_service.get_team_player_tokens(team_id=request.team_id)
 
 
-@router.post("/insert_user")
+@router.post("/insert_users_and_teams")
 async def insert_user(request: UserInsert):
     return await TeamController.add_user_to_team(
-        team_id=request.team_id, user_id=request.user_id
+        team_ids=request.team_ids, user_ids=request.user_ids
     )

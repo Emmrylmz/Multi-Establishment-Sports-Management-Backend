@@ -15,6 +15,7 @@ from app import utils
 from ..oauth2 import require_user
 from ..service.TeamService import team_service
 from ..service.UserService import user_service
+from typing import List, Dict, Any
 
 
 class TeamController:
@@ -35,11 +36,29 @@ class TeamController:
                 detail="Could not create team",
             )
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
-        await app.rabbit_client.start_subscription(
-            queue_name=str(created_team["team_name"])
+        team_id = created_team["team_id"]
+        await app.rabbit_client.declare_and_bind_queue(
+            queue_name=f"team_{team_id}_events",
+            routing_keys=[f"team.{team_id}.event.*"],
         )
         return created_team
 
-    async def add_user_to_team(team_id, user_id):
-        response = await team_service.insert_user(team_id=team_id, user_id=user_id)
-        return response
+    async def add_user_to_team(team_ids, user_ids):
+        user_ids = [utils.ensure_object_id(user_id) for user_id in user_ids]
+        team_ids = [utils.ensure_object_id(team_id) for team_id in team_ids]
+
+        role = await user_service.check_role(user_id=user_ids[0])
+        user_role_field = "team_players" if role == "Player" else "team_coaches"
+
+        user_response = await team_service.add_users_to_teams(
+            team_ids=team_ids, user_ids=user_ids, user_role_field=user_role_field
+        )
+        team_response = await user_service.add_teams_to_users(
+            team_ids=team_ids, user_ids=user_ids
+        )
+
+        return {
+            "results of player/user insertion": {
+                str(user_response),
+            }
+        }

@@ -37,8 +37,8 @@ class PlayerTokenRequest(BaseModel):
 
 
 class UserInsert(BaseModel):
-    team_id: str
-    user_id: str
+    team_ids: List[str]
+    user_ids: List[str]
 
     class Config:
         orm_mode = True

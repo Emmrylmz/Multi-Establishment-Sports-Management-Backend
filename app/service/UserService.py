@@ -47,9 +47,12 @@ class UserService(MongoDBService):
         # Now check the role
         return user.get("role")
 
-    async def insert_team(self, team_id):
+    async def add_teams_to_users(self, user_ids, team_ids):
 
-        return
+        users_update_result = await self.collection.update_many(
+            {"_id": {"$in": user_ids}}, {"$addToSet": {"teams": {"$each": team_ids}}}
+        )
+        return users_update_result
 
 
 user_service = UserService(User)
