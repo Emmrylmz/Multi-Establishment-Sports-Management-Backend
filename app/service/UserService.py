@@ -1,14 +1,27 @@
 # app/services/user_service.py
+<<<<<<< HEAD
 from fastapi import Depends
+=======
+from fastapi import Depends, HTTPException
+from app.database import User
+>>>>>>> rabbit_stann
 from app.serializers.userSerializer import userEntity, userResponseEntity
+from app.service.MongoDBService import MongoDBService
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
 import logging
+<<<<<<< HEAD
 from ..config import settings
 from .MongoDBService import MongoDBService
 from ..database import User
 from pymongo.collection import Collection
+=======
+from pymongo.collection import Collection
+from ..database import User
+
+logging.basicConfig(level=logging.DEBUG)
+>>>>>>> rabbit_stann
 
 
 class UserService(MongoDBService):
@@ -16,6 +29,14 @@ class UserService(MongoDBService):
         super().__init__(collection=collection)
 
     async def check_user_exists(self, email: str):
+<<<<<<< HEAD
+
+        return await self.collection.find_one({"email": email.lower()})
+
+    async def verify_user_credentials(self, email: str, password: str):
+
+        user = await self.collection.find_one({"email": email.lower()})
+=======
 
         return await self.collection.find_one({"email": email.lower()})
 
@@ -28,21 +49,45 @@ class UserService(MongoDBService):
             return None
 
         return userEntity(user)
+    
+    @staticmethod
+    async def verify_user_credentials(email: str, password: str):
 
+        user = await User.find_one({"email": email.lower()})
+>>>>>>> rabbit_stann
+        jls_extract_var = user
+        if not user or not utils.verify_password(password, jls_extract_var["password"]):
+
+            return None
+
+        return userEntity(user)
+
+<<<<<<< HEAD
     def validate_role(self, user, role):
         # Check if the user object is None
         if user is None:
             raise ValueError("No user data available to validate role")
 
         # Now check the role
+=======
+    def validate_role(self, user: dict, role: "Coach"):
+>>>>>>> rabbit_stann
         if user.get("role") != role:
             raise ValueError(f"User role does not match required role: {role}")
 
+<<<<<<< HEAD
     async def check_role(self, user_id):
         # Check if the user object is None
         user = await self.get_by_id(ObjectId(user_id))
         if user is None:
             raise ValueError("No user data available to validate role")
+=======
+
+user_service = UserService(User)
+    # @staticmethod
+    # def get_current_user(token: str = Depends(user_service.get_current_user_token)):
+    #     """
+>>>>>>> rabbit_stann
 
         # Now check the role
         return user.get("role")

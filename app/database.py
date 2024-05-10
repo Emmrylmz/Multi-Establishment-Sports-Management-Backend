@@ -1,7 +1,16 @@
+<<<<<<< HEAD
 from motor.motor_asyncio import AsyncIOMotorClient
 import asyncio
 from app.config import settings
 
+=======
+from pymongo import mongo_client
+from motor.motor_asyncio import AsyncIOMotorClient
+import pymongo
+from app.config import settings
+
+client = AsyncIOMotorClient(settings.DATABASE_URL, serverSelectionTimeoutMS=5000)
+>>>>>>> rabbit_stann
 
 client = AsyncIOMotorClient(settings.DATABASE_URL, serverSelectionTimeoutMS=5000)
 try:

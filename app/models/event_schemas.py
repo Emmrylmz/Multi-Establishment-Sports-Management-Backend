@@ -8,8 +8,13 @@ import pydantic
 
 class BeeObjectId(ObjectId):
     # fix for FastApi/docs
+<<<<<<< HEAD
     __origin__ = pydantic.typing.Literal
     __args__ = (str,)
+=======
+    _origin_ = pydantic.typing.Literal
+    _args_ = (str,)
+>>>>>>> rabbit_stann
 
 
 pydantic.json.ENCODERS_BY_TYPE[ObjectId] = str

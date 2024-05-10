@@ -18,7 +18,7 @@ class PersonalAttributesBase(BaseModel):
 
 class CreateUserSchema(BaseModel):
     email: EmailStr
-    password: constr(min_length=8)
+    password: constr(min_length=8) # type: ignore
     passwordConfirm: str
     name: str
     photo: Optional[str] = (None,)
@@ -40,7 +40,10 @@ class CreateUserSchema(BaseModel):
             "example": {
                 "email": "user@example.com",
                 "password": "strongpassword",
+                "passwordConfirm": "strongpassword",
                 "name": "John Doe",
+                "role": "Player",
+                "teams": ["team1", "team2"],
             }
         }
 
@@ -58,6 +61,7 @@ class UserResponseSchema(BaseModel):
     email: Optional[EmailStr]  # Make email optional if it could be None
     photo: Optional[str]
     role: Optional[str]
+    teams: Optional[List[str]]
     # Remove sensitive data fields from the response model
     created_at: Optional[datetime]
 

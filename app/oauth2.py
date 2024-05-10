@@ -5,7 +5,11 @@ from fastapi_jwt_auth import AuthJWT
 from pydantic import BaseModel
 from bson.objectid import ObjectId
 from fastapi_jwt_auth.exceptions import AuthJWTException
+<<<<<<< HEAD
 from app.service.UserService import user_service
+=======
+from app.service.UserService import UserService, user_service
+>>>>>>> rabbit_stann
 
 
 from app.serializers.userSerializer import userEntity
@@ -48,7 +52,11 @@ async def require_user(Authorize: AuthJWT = Depends()):
     try:
         Authorize.jwt_required()
         user_id = Authorize.get_jwt_subject()
+<<<<<<< HEAD
         user = await user_service.get_by_id(user_id)  # Now asynchronous
+=======
+        user = await user_service.get_by_id(user_id)
+>>>>>>> rabbit_stann
 
         if not user:
             raise UserNotFound("User no longer exists")
