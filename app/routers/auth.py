@@ -11,7 +11,6 @@ from fastapi import APIRouter
 from app.controller.AuthController import AuthController
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
-from jose import jwt, JWTError
 from fastapi_jwt_auth import AuthJWT
 from ..models.firebase_token_schemas import PushTokenSchema
 

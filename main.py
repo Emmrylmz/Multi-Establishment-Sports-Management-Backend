@@ -18,6 +18,7 @@ class FooApp(FastAPI):
 path = r"C:\Users\emmry\OneDrive\Masaüstü\DACKA-App\server\app-fastapi\app\service\firbaseKey.json"
 
 url = "amqp://guest:guest@localhost:5672//"
+
 app = FooApp(
     rabbit_url=url,
     firebase_cred_path=path,
@@ -57,5 +58,6 @@ async def startup_event():
 @app.on_event("shutdown")
 async def shutdown_event():
     # Close RabbitMQ connection
+    # stannsey
     await rabbit_client.close()
     print("RabbitMQ connection closed.")
