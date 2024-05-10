@@ -1,18 +1,14 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
-from ..database import Event, User
 from app.service.EventService import EventService
 from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
-from ..service.UserService import UserService
-import boto3
-
+from ..service.UserService import user_service
+from ..service.EventService import event_service
+from ..utils import DateTimeEncoder
 
 # from ...main import rabbit_client
-
-
-event_service = EventService(Event)
 
 
 class EventController:
@@ -22,26 +18,34 @@ class EventController:
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
-        UserService.validate_role(user, "Coach")
+        user_service.validate_role(user=user, role="Coach")
+
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
-        event_data["creator_id"] = user["id"]
+        event_data["creator_id"] = user["_id"]
 
-        # Call to your service layer to save the event
+        # Call to your service layer to save the event asynchronously
         created_event = await event_service.create(event_data)
         if not created_event:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_BAD_REQUEST,
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Could not create event",
             )
-        # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
-        await app.rabbit_client.publish_message(
-            queue="team123", message={"message": event_data}
+
+        # Assuming created_event returns a dict or a Pydantic model
+        event_response = (
+            created_event.dict() if hasattr(created_event, "dict") else created_event
         )
-        return created_event
+
+        # Publishing a message to RabbitMQ asynchronously
+        await request.app.rabbit_client.publish_message(
+            routing_key=f"team.{event_data['team_id']}.event.created",
+            message={"event": event, "action": "created"},
+        )
+        return event_response
 
     @staticmethod
-    async def read_event(event_id: ObjectId):
+    async def read_event(event_id: str):
         event = event_service.get_by_id(event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
@@ -57,7 +61,7 @@ class EventController:
             raise HTTPException(status_code=404, detail="Event not found")
         return updated_event
 
-    async def delete_event(event_id: ObjectId):
+    async def delete_event(event_id: str):
         result = event_service.delete_event(ObjectId(event_id))
         # raise HTTPException(status_code=404, detail="Event not found")
         return result

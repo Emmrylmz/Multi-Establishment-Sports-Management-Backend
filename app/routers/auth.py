@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from app import oauth2
-from app.database import User
 from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from ..models import schemas
@@ -13,6 +12,7 @@ from app.controller.AuthController import AuthController
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
+from ..models.firebase_token_schemas import PushTokenSchema
 
 
 router = APIRouter()
@@ -29,9 +29,17 @@ async def register(payload: schemas.CreateUserSchema):
     return AuthController.register_user(payload)
 
 
+@router.post(
+    "/push_token",
+    status_code=status.HTTP_201_CREATED,
+)
+def get_push_token(payload: PushTokenSchema, user: dict = Depends(require_user)):
+    return AuthController.get_push_token(payload, user)
+
+
 @router.post("/login")
-def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
-    return AuthController.login_user(payload, Authorize)
+async def login(payload: schemas.LoginUserSchema, Authorize: AuthJWT = Depends()):
+    return await AuthController.login_user(payload, Authorize)
 
 
 @router.post("/checkToken")
@@ -46,9 +54,9 @@ def refresh_token(response: Response, Authorize: AuthJWT = Depends()):
 
 
 @router.get("/logout", status_code=status.HTTP_200_OK)
-def logout(
+async def logout(
     response: Response,
     Authorize: AuthJWT = Depends(),
     user_id: str = Depends(oauth2.require_user),
 ):
-    return AuthController.logout(response, Authorize, user_id)
+    return await AuthController.logout(response, Authorize, user_id)
