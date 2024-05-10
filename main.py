@@ -51,7 +51,11 @@ async def startup_event():
     # app.pika_client = PikaClient()  # Ensure you initialize this correctly
     app.firebase_service.init_firebase()
     await app.rabbit_client.start()
-    await app.rabbit_client.start_consumer("asdasddassssx")
+    # await app.rabbit_client.declare_and_bind_queue(
+    #     queue_name="663d824acfc57501b09d6e42",
+    #     routing_keys=["team.663d824acfc57501b09d6e42.event.*"],
+    # )
+    await app.rabbit_client.start_consumer("663d824acfc57501b09d6e42")
 
 
 @app.on_event("shutdown")

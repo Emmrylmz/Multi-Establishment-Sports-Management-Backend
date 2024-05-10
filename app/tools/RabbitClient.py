@@ -15,8 +15,9 @@ import logging
 from ..tools.ExponentServerSDK import push_client, PushMessage
 import aio_pika
 from datetime import datetime
-from ..utils import DateTimeEncoder
+from ..utils import ensure_object_id
 from ..service.TokenService import push_token_service
+from bson import ObjectId
 
 
 logging.basicConfig(
@@ -63,7 +64,7 @@ class RabbitClient:
 
     # ---------------------------------------------------------
     #
-    def _process_incoming_message(self, message: IncomingMessage):
+    async def _process_incoming_message(self, message: IncomingMessage):
         """Processing an incoming message from RabbitMQ.
 
         :param message: The received message.
@@ -72,9 +73,13 @@ class RabbitClient:
         try:
             message_body = message.body.decode()  # Decode bytes to string
             data = json.loads(message_body)  # Parse JSON string to dictionary
+            if "team_id" in data:
+                await self.handle_push_notification(data)
+                message.ack()
 
             logging.debug(f"Received the message: {data}")
-            self.handle_push_notification(data)
+            message.ack()
+
         except json.JSONDecodeError as e:
             logging.error(
                 f"JSON decode error: {e} - Message Body: {message.body.decode()}"
@@ -82,20 +87,27 @@ class RabbitClient:
         except Exception as e:
             logging.error(f"Failed to process message: {str(e)}")
 
-    def handle_push_notification(self, data):
+    async def handle_push_notification(self, data):
         # Here you'd use the details from `data` to create your push message
-        logging.debug(f"Received data for push notification: {data}")
-        push_token_service.get_team_player_tokens(data["team_id"])
-        push_message = PushMessage(
-            to="ExponentPushToken[6Nn4MnPCDEj77x1HHAiKdg]",
-            title="New Message From Your Coach !!",
-            body="Check it out that",
-            data={"message": data},
-        )
+        logging.debug(f"Received data for push notification: {str(data)}")
         try:
+            team_id = ObjectId(
+                data["team_id"]
+            )  # Ensure 'team_id' is accessed correctly
+            expo_ids = await push_token_service.get_team_player_tokens(team_id=team_id)
+            # Prepare an array of PushMessage objects
+            push_messages = [
+                PushMessage(
+                    to=token,
+                    title="New Message From Your Coach !!",
+                    body="Check it out that",
+                    data={"message": data},
+                )
+                for token in expo_ids
+            ]
             # Send the notification
-            ticket = push_client.publish(push_message)
-            return {"status": "Success", "ticket": ticket}
+            push_tickets = push_client.publish(push_messages)
+            return {"status": "Success", "ticket": push_tickets}
 
         except Exception as e:
             # Catch any broad exceptions and return as HTTP error
@@ -142,37 +154,8 @@ class RabbitClient:
         self.exchange = await self.channel.declare_exchange(
             self.exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
         )
-
         # Set Quality of Service for the channel.
         await self.channel.set_qos(prefetch_count=1)
-
-    # ---------------------------------------------------------
-
-    # ---------------------------------------------------------
-    #
-
-    # async def publish_message(self, queue: str, message: dict):
-    #     """Publish a message on specified RabbitMQ queue asynchronously.
-
-    #     :param queue: Publishing queue.
-    #     :param message: Message to be published.
-    #     """
-
-    #     try:
-    #         message_body = Message(
-    #             content_type="application/json",
-    #             delivery_mode=DeliveryMode.PERSISTENT,
-    #             body=json.dumps(
-    #                 message, indent=4, sort_keys=True, default=str
-    #             ).encode(),
-    #         )
-    #         await self.channel.default_exchange.publish(
-    #             routing_key=queue, message=message_body
-    #         )
-    #         logging.info(f"Message published to {queue}")
-    #     except Exception as e:
-    #         logging.error(f"Failed to publish message to {queue}: {e}")
-    #         raise
 
     async def declare_and_bind_queue(self, queue_name: str, routing_keys: list):
         """Declare a new queue and bind it with specific routing keys."""
@@ -201,11 +184,9 @@ class RabbitClient:
     async def start_consumer(self, queue_name: str):
         """Start consuming messages from a specified queue."""
         queue = await self.channel.get_queue(queue_name)
-        await queue.consume(self._process_incoming_message)
+        await queue.consume(self._process_incoming_message, no_ack=False)
         logging.info(f"Started consuming from {queue_name}")
 
-    # ---------------------------------------------------------
-    #
     @property
     def is_connected(self) -> bool:
         """Return connection status."""

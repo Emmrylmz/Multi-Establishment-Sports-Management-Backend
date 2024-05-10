@@ -24,7 +24,7 @@ class PushTokenService(MongoDBService):
 
     async def get_team_player_tokens(self, team_id: str) -> List[str]:
         try:
-            team = await team_service.get_by_id(team_id)
+            team = await team_service.get_by_id(ObjectId(team_id))
 
             if team:
 
