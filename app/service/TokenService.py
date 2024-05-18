@@ -1,43 +1,40 @@
 from bson import ObjectId
 from pymongo.collection import Collection
-from datetime import datetime
 from app.serializers.eventSerializers import eventEntity
 from .MongoDBService import MongoDBService
-from app.service.UserService import user_service
 from ..models.firebase_token_schemas import PushTokenSchema
-from ..service.TeamService import team_service
-import asyncio
-from typing import List
 from ..database import Push_Token
-from fastapi.encoders import jsonable_encoder
 
 
 class PushTokenService(MongoDBService):
-    def __init__(self, collection: Collection):
-        super().__init__(collection)
+    def __init__(self):
+        super().__init__(Push_Token)
 
     async def save_token(self, payload: PushTokenSchema, user_id: str):
         data = payload.dict()
+        token = await self.get_by_id(user_id)
+        if token:
+            res = await self.update(user_id, {"token": payload.token})
+            return res
         data["_id"] = ObjectId(user_id)
         result = await self.create(data)
-        return result.inserted_id
+        return result
 
-    async def get_team_player_tokens(self, team_id: str) -> List[str]:
+    async def get_team_player_tokens(self, team_id):
         try:
-            team = await team_service.get_by_id(team_id)
+            team = await team_service.get_by_id(ObjectId(team_id))
 
-            players_ids = team["team_players"]
+            if team:
+                players_ids = team["team_players"]
+                object_ids = [ObjectId(id) for id in players_ids]
+                query = {"_id": {"$in": object_ids}}
+                documents = await self.list(query=query)
+                # Extract tokens, ensuring each player has a token attribute
+                tokens = [player["token"] for player in documents if "token" in player]
 
-            object_ids = [ObjectId(id) for id in players_ids]
-
-            query = {"_id": {"$in": object_ids}}
-
-            documents = await self.list(query=query)
-
-            # Extract tokens, ensuring each player has a token attribute
-            tokens = [player["token"] for player in documents if "token" in player]
-
-            return tokens
+                return tokens
+            else:
+                return {"team not found"}
         except Exception as e:
             # Handle possible exceptions
             print(f"An error occurred: {e}")
@@ -50,6 +47,3 @@ class PushTokenService(MongoDBService):
             # Generic exception handling to catch unexpected errors
             print(f"An error occurred: {e}")
             return []
-
-
-push_token_service = PushTokenService(Push_Token)

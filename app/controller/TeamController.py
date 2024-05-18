@@ -13,8 +13,6 @@ from datetime import datetime, timedelta
 from app.config import settings
 from app import utils
 from ..oauth2 import require_user
-from ..service.TeamService import team_service
-from ..service.UserService import user_service
 from typing import List, Dict, Any
 
 
@@ -27,7 +25,7 @@ class TeamController:
     ):
 
         app = request.app
-        user_service.validate_role(user, "Coach")
+        auth_service.validate_role(user, "Coach")
         team_data = team_payload.dict()
         created_team = await team_service.create(team_data)
         if not created_team:
@@ -36,9 +34,9 @@ class TeamController:
                 detail="Could not create team",
             )
         # If created_event is a Pydantic model, return its .dict(), otherwise return it directly if it's already a dict
-        team_id = created_team["team_id"]
+        team_id = created_team["_id"]
         await app.rabbit_client.declare_and_bind_queue(
-            queue_name=f"team_{team_id}_events",
+            queue_name=f"{team_id}",
             routing_keys=[f"team.{team_id}.event.*"],
         )
         return created_team
@@ -47,13 +45,13 @@ class TeamController:
         user_ids = [utils.ensure_object_id(user_id) for user_id in user_ids]
         team_ids = [utils.ensure_object_id(team_id) for team_id in team_ids]
 
-        role = await user_service.check_role(user_id=user_ids[0])
+        role = await auth_service.check_role(user_id=user_ids[0])
         user_role_field = "team_players" if role == "Player" else "team_coaches"
 
         user_response = await team_service.add_users_to_teams(
             team_ids=team_ids, user_ids=user_ids, user_role_field=user_role_field
         )
-        team_response = await user_service.add_teams_to_users(
+        team_response = await auth_service.add_teams_to_users(
             team_ids=team_ids, user_ids=user_ids
         )
 
@@ -62,3 +60,8 @@ class TeamController:
                 str(user_response),
             }
         }
+
+    async def get_team_users_by_id(team_id: str):
+        team_id = utils.ensure_object_id(team_id)
+        players = await team_service.team_users_list(team_id)
+        return players

@@ -1,7 +1,7 @@
 from passlib.context import CryptContext
 from bson import ObjectId
 import json
-from datetime import datetime
+import datetime
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -35,12 +35,11 @@ def ensure_object_id(id):
     return ObjectId(id) if not isinstance(id, ObjectId) else id
 
 
-class DateTimeEncoder(JSONEncoder):
-    """Custom encoder for `datetime` objects for JSON serialization."""
+class DateTimeEncoder(json.JSONEncoder):
 
     def default(self, obj):
-        if isinstance(obj, datetime):
-            # Format the date to string as ISO 8601:
+        if isinstance(obj, type([datetime, datetime.date, datetime.time])):
             return obj.isoformat()
-        # Let the base class default method raise the TypeError
-        return JSONEncoder.default(self, obj)
+        elif isinstance(obj, type(datetime.timedelta)):
+            return (datetime.datetime.min + obj).time().isoformat()
+        return super(DateTimeEncoder, self).default(obj)

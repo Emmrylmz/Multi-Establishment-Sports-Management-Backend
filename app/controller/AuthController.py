@@ -1,43 +1,71 @@
 # app/controllers/auth_controller.py
 
 from fastapi import HTTPException, status
-from app.service.UserService import user_service
-from ..models import schemas
+from ..models.user_schemas import (
+    CreateUserSchema,
+    LoginUserSchema,
+    UserAttributesSchema,
+)
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from datetime import datetime, timedelta
 from app.config import settings
 from app import utils
-from app.service.TokenService import push_token_service
 from ..oauth2 import require_user
 from ..models.firebase_token_schemas import PushTokenSchema
-from bson import ObjectId
+from .BaseController import BaseController
 
 
-class AuthController:
-    @staticmethod
-    def register_user(create_user_schema: schemas.CreateUserSchema):
-        if user_service.check_user_exists(create_user_schema.email):
+class AuthController(BaseController):
+
+    async def register_user(self, payload: CreateUserSchema):
+        if await self.auth_service.check_user_exists(payload.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT, detail="Account already exists"
             )
 
-        if create_user_schema.password != create_user_schema.passwordConfirm:
+        if payload.password != payload.passwordConfirm:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match"
             )
 
-        user_data = create_user_schema.dict(exclude_none=False)
-        hashed_password = utils.hash_password(user_data["password"])
+        user_data = payload.dict(exclude_none=False)
+        team_ids = payload.teams
+        team_ids = [utils.ensure_object_id(team_id) for team_id in team_ids]
+        user_data["teams"] = team_ids
+        for team_id in payload.teams:
+            if not await self.team_service.check_team_exists(team_id):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Team with id {team_id} not found",
+                )
+
+        hashed_password = self.hash_handler(user_data["password"])
         user_data["password"] = hashed_password
         user_data.pop("passwordConfirm", None)
-        new_user = user_service.create_user(user_data)
+
+        new_user = await self.auth_service.create(user_data)
+        user_id = utils.ensure_object_id(new_user["_id"])
         user_dict = {k: v for k, v in new_user.items() if k != "password"}
+
+        if len(payload.teams) > 0:
+
+            user_role_field = (
+                "team_players" if user_data["role"] == "Player" else "team_coaches"
+            )
+            result = await self.team_service.add_users_to_teams(
+                user_ids=[user_id],
+                team_ids=team_ids,
+                user_role_field=user_role_field,
+                register=True,
+            )
+
+            return {"status": "success", "user": user_dict, "result": result}
+
         return {"status": "success", "user": user_dict}
 
-    @staticmethod
-    async def login_user(login_user_schema: schemas.LoginUserSchema, Authorize):
-        user = await user_service.verify_user_credentials(
-            login_user_schema.email, login_user_schema.password
+    async def login_user(self, payload: LoginUserSchema, Authorize):
+        user = await self.auth_service.verify_user_credentials(
+            payload.email, payload.password
         )
         if not user:
             raise HTTPException(
@@ -54,7 +82,7 @@ class AuthController:
             expires_time=timedelta(minutes=settings.REFRESH_TOKEN_EXPIRES_IN),
         )
 
-        # user_service.update_user_login(user, access_token, refresh_token)
+        # auth_service.update_user_login(user, access_token, refresh_token)
 
         return {
             "status": "success",
@@ -69,7 +97,7 @@ class AuthController:
         }
 
     # Similarly implement refresh_token and logout methods
-    def refresh_access_token(response: Response, Authorize):
+    def refresh_access_token(self, response: Response, Authorize):
         try:
             Authorize.jwt_refresh_token_required()
             user_id = Authorize.get_jwt_subject()
@@ -78,7 +106,7 @@ class AuthController:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not refresh access token",
                 )
-            user = user_service.get_user_by_id(user_id)
+            user = selfauth_service.get_user_by_id(user_id)
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -86,7 +114,7 @@ class AuthController:
                 )
             access_token = Authorize.create_access_token(
                 subject=str(user["id"]),
-                expires_time=timedelta(minutes=user_service.ACCESS_TOKEN_EXPIRES_IN),
+                expires_time=timedelta(minutes=auth_service.ACCESS_TOKEN_EXPIRES_IN),
             )
 
         except Exception as e:
@@ -101,8 +129,8 @@ class AuthController:
         response.set_cookie(
             "access_token",
             access_token,
-            user_service.ACCESS_TOKEN_EXPIRES_IN * 60,
-            user_service.ACCESS_TOKEN_EXPIRES_IN * 60,
+            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
+            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
             "/",
             None,
             False,
@@ -112,8 +140,8 @@ class AuthController:
         response.set_cookie(
             "logged_in",
             "True",
-            user_service.ACCESS_TOKEN_EXPIRES_IN * 60,
-            user_service.ACCESS_TOKEN_EXPIRES_IN * 60,
+            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
+            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
             "/",
             None,
             False,
@@ -122,18 +150,28 @@ class AuthController:
         )
         return {"access_token": access_token}
 
-    @staticmethod
-    def logout(response: Response, Authorize, user_id: str):
+    async def logout(self, response: Response, Authorize, user_id: str):
         Authorize.unset_jwt_cookies()
         response.set_cookie("logged_in", "", -1)
         return {"status": "success"}
 
-    @staticmethod
-    def get_push_token(payload: PushTokenSchema, user: dict = Depends(require_user)):
+    async def get_push_token(
+        self, payload: PushTokenSchema, user: dict = Depends(require_user)
+    ):
         try:
             # Assuming user is a dict and user['_id'] exists
             user_id = user["_id"]  # Ensure this is the correct key for user ID
-            result = push_token_service.save_token(payload, user_id)
+            result = await self, push_token_service.save_token(payload, user_id)
             return {"result": payload.dict()}  # Return payload as a dictionary
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
+
+    # @staticmethod
+    # async def submit_user_attributes(payload: UserAttributesSchema, user):
+    #     try:
+    #         payload_data = payload.dict()
+    #         user_id = user["_id"]
+    #         payload_data["_id"] = user_id
+    #         response = await auth_service.create(payload_data)
+    #     except e:
+    #         print(e)
