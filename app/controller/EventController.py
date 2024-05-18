@@ -1,9 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
-from ..oauth2 import require_user
 from ..models.event_schemas import CreateEventSchema
 from bson import ObjectId
-from ..utils import ensure_object_id
 from .BaseController import BaseController
 
 # from ...main import rabbit_client
@@ -14,7 +12,7 @@ class EventController(BaseController):
         self,
         event: CreateEventSchema,
         request: Request,
-        user: dict = Depends(require_user),
+        user: dict,
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
@@ -64,6 +62,3 @@ class EventController(BaseController):
         query = {"team_id": team_id}
         events = await self.event_service.list(query)
         return events
-
-
-# , user: dict = Depends(require_user)
