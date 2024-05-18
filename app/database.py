@@ -12,10 +12,11 @@ except Exception as e:
     print(f"Unable to connect to the MongoDB server: {e}")
 
 db = client[settings.MONGO_INITDB_DATABASE]
-User = db.users
+Auth = db.auth
 Event = db.events
 Team = db.teams
 Push_Token = db.push_token
+User_Info = db.user_info
 # Creating an index asynchronously
 # Add more async operations as needed
 # Example: inserting a document

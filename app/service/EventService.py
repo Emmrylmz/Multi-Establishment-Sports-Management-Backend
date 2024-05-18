@@ -8,8 +8,8 @@ from ..database import Event
 
 
 class EventService(MongoDBService):
-    def __init__(self, collection: str):
-        super().__init__(collection)
+    def __init__(self):
+        super().__init__(Event)
 
     # async def list_events(self, team_id: dict):
     #     query = {"team_id": team_id}
@@ -27,6 +27,3 @@ class EventService(MongoDBService):
     # Add event-specific methods if necessary
     def get_upcoming_events(self):
         return self.list({"start_date": {"$gte": datetime.utcnow()}})
-
-
-event_service = EventService(Event)

@@ -1,11 +1,12 @@
 from fastapi import FastAPI, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
-import asyncio
 from app.config import settings
-from app.routers import auth, notification, event, team
+from app.routers.auth import auth_router
+from app.routers.event import event_router
+from app.routers.team import team_router
+from app.routers.user import user_router
 from app.tools.RabbitClient import RabbitClient
 from app.service.FirebaseService import FirebaseService
-from app.tools.ExponentServerSDK import PushMessage, push_client
 
 
 class FooApp(FastAPI):
@@ -35,10 +36,11 @@ app.add_middleware(
 )
 
 
-app.include_router(auth.router, tags=["Auth"], prefix="/api/auth")
-app.include_router(notification.router)
-app.include_router(event.router, tags=["events"], prefix="/api/events")
-app.include_router(team.router, tags=["teams"], prefix="/api/teams")
+app.include_router(auth_router, tags=["Auth"], prefix="/api/auth")
+# app.include_router(notification.router)
+app.include_router(event_router, tags=["events"], prefix="/api/events")
+app.include_router(team_router, tags=["teams"], prefix="/api/teams")
+app.include_router(user_router, tags=["user_info"], prefix="/api/user_info")
 #     notifications.router, tags=["Notifications"], prefix="/api/notifications"
 # )
 
@@ -46,16 +48,14 @@ app.include_router(team.router, tags=["teams"], prefix="/api/teams")
 # Startup and Shutdown Events
 @app.on_event("startup")
 async def startup_event():
-
     # Connect to RabbitMQ
-    # app.pika_client = PikaClient()  # Ensure you initialize this correctly
     app.firebase_service.init_firebase()
     await app.rabbit_client.start()
     # await app.rabbit_client.declare_and_bind_queue(
-    #     queue_name="663d824acfc57501b09d6e42",
-    #     routing_keys=["team.663d824acfc57501b09d6e42.event.*"],
+    #     queue_name="663be0c3b6f73eaa9b08b048",
+    #     routing_keys=["team.663be0c3b6f73eaa9b08b048.event.*"],
     # )
-    await app.rabbit_client.start_consumer("663d824acfc57501b09d6e42")
+    await app.rabbit_client.start_consumer("66420eb2e00fde33e4329b05")
 
 
 @app.on_event("shutdown")

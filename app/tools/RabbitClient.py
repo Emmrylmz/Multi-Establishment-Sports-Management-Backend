@@ -15,9 +15,9 @@ import logging
 from ..tools.ExponentServerSDK import push_client, PushMessage
 import aio_pika
 from datetime import datetime
-from ..utils import ensure_object_id
-from ..service.TokenService import push_token_service
-from bson import ObjectId
+from ..utils import ensure_object_id, DateTimeEncoder
+from bson import ObjectId, json_util
+from fastapi.encoders import jsonable_encoder
 
 
 logging.basicConfig(
@@ -72,13 +72,13 @@ class RabbitClient:
         logging.debug("Starting message processing")
         try:
             message_body = message.body.decode()  # Decode bytes to string
-            data = json.loads(message_body)  # Parse JSON string to dictionary
-            if "team_id" in data:
-                await self.handle_push_notification(data)
-                message.ack()
+            data = json.loads(message_body)
+            event = data["event"].get("team_id")
+            print(type(event))
+            await self.handle_push_notification(event)
 
             logging.debug(f"Received the message: {data}")
-            message.ack()
+            await message.ack()
 
         except json.JSONDecodeError as e:
             logging.error(
@@ -89,13 +89,11 @@ class RabbitClient:
 
     async def handle_push_notification(self, data):
         # Here you'd use the details from `data` to create your push message
-        logging.debug(f"Received data for push notification: {str(data)}")
+        logging.debug(f"Received data for push notification: {data}")
         try:
-            team_id = ObjectId(
-                data["team_id"]
-            )  # Ensure 'team_id' is accessed correctly
-            expo_ids = await push_token_service.get_team_player_tokens(team_id=team_id)
+            expo_ids = await push_token_service.get_team_player_tokens(team_id=data)
             # Prepare an array of PushMessage objects
+            print(expo_ids)
             push_messages = [
                 PushMessage(
                     to=token,
@@ -106,7 +104,7 @@ class RabbitClient:
                 for token in expo_ids
             ]
             # Send the notification
-            push_tickets = push_client.publish(push_messages)
+            push_tickets = push_client.publish_multiple(push_messages)
             return {"status": "Success", "ticket": push_tickets}
 
         except Exception as e:
@@ -171,11 +169,11 @@ class RabbitClient:
         # if hasattr(message, "dict"):
         #     message = message.dict()
 
+        if hasattr(message, "dict"):
+            message = message.dict()
         body = json.dumps(message, indent=4, sort_keys=True, default=str).encode()
         msg = Message(
-            body,
-            content_type="application/json",
-            delivery_mode=DeliveryMode.PERSISTENT,
+            body, content_type="application/json", delivery_mode=DeliveryMode.PERSISTENT
         )
 
         await self.exchange.publish(msg, routing_key=routing_key)

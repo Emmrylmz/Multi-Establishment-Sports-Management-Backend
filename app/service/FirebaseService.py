@@ -1,9 +1,12 @@
 import firebase_admin
 from firebase_admin import credentials, exceptions
+from ..database import Push_Token
+from .BaseService import BaseService
 
 
-class FirebaseService:
+class FirebaseService(BaseService):
     def __init__(self, cred_path: str):
+        super().__init__(Push_Token)
         self.cred_path = cred_path
         self.firebase_app = None
         self.init_firebase()

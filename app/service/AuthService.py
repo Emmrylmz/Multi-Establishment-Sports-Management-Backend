@@ -1,19 +1,56 @@
 # app/services/user_service.py
-from fastapi import Depends
+from fastapi import Depends, status
 from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from .BaseService import BaseService
-from ..database import User_Info
+from .MongoDBService import MongoDBService
+from ..database import Auth
 from pymongo.collection import Collection
 
 
-class UserService(BaseService):
+class AuthService(MongoDBService):
     def __init__(self):
-        super().__init__(User_Info)
+        super().__init__(Auth)
+
+    async def check_user_exists(self, email: str):
+        response = await self.collection.find_one({"email": email.lower()})
+        if response:
+            print(f"User found: {response}")  # Debug logging
+            return response
+        else:
+            print("No user found")  # Debug logging
+            return None
+
+    async def verify_user_credentials(self, email: str, password: str):
+
+        user = await self.collection.find_one({"email": email.lower()})
+        jls_extract_var = user
+        if not user or not utils.verify_password(password, jls_extract_var["password"]):
+
+            return None
+
+        return userEntity(user)
+
+    def validate_role(self, user, role):
+        # Check if the user object is None
+        if user is None:
+            raise ValueError("No user data available to validate role")
+
+        # Now check the role
+        if user.get("role") != role:
+            raise ValueError(f"User role does not match required role: {role}")
+
+    async def check_role(self, user_id):
+        # Check if the user object is None
+        user = await self.get_by_id(ObjectId(user_id))
+        if user is None:
+            raise ValueError("No user data available to validate role")
+
+        # Now check the role
+        return user.get("role")
 
 
 # @staticmethod
