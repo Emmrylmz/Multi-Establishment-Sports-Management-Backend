@@ -48,10 +48,10 @@ class TeamController(BaseController):
         user_role_field = "team_players" if role == "Player" else "team_coaches"
 
         user_response = await self.team_service.add_users_to_teams(
-            team_ids=team_ids, user_ids=user_ids, user_role_field=user_role_field
-        )
-        team_response = await self.auth_service.add_teams_to_users(
-            team_ids=team_ids, user_ids=user_ids
+            team_ids=team_ids,
+            user_ids=user_ids,
+            user_role_field=user_role_field,
+            register=False,
         )
 
         return {
@@ -64,3 +64,8 @@ class TeamController(BaseController):
         team_id = self.format_handler(team_id)
         players = await self.team_service.team_users_list(team_id)
         return players
+
+    async def get_teams_by_id(self, team_ids: List[str]):
+        object_ids = [self.format_handler(team_id) for team_id in team_ids]
+        teams = await self.team_service.get_teams_by_id(object_ids)
+        return teams

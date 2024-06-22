@@ -1,22 +1,21 @@
 # app/services/user_service.py
 from fastapi import Depends, status
-from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from .MongoDBService import MongoDBService
+from .BaseService import BaseService
 from ..database import Auth
 from pymongo.collection import Collection
 
 
-class AuthService(MongoDBService):
+class AuthService(BaseService):
     def __init__(self):
         super().__init__(Auth)
 
     async def check_user_exists(self, email: str):
-        response = await self.collection.find_one({"email": email.lower()})
+        response = await self.auth_collection.find_one({"email": email.lower()})
         if response:
             print(f"User found: {response}")  # Debug logging
             return response
@@ -26,13 +25,13 @@ class AuthService(MongoDBService):
 
     async def verify_user_credentials(self, email: str, password: str):
 
-        user = await self.collection.find_one({"email": email.lower()})
+        user = await self.auth_collection.find_one({"email": email.lower()})
         jls_extract_var = user
         if not user or not utils.verify_password(password, jls_extract_var["password"]):
 
             return None
 
-        return userEntity(user)
+        return user
 
     def validate_role(self, user, role):
         # Check if the user object is None

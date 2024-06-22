@@ -2,17 +2,16 @@ from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 from fastapi import Response, status, Depends, HTTPException, APIRouter
 from app import oauth2
-from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from ..models.user_schemas import (
     LoginUserSchema,
     CreateUserSchema,
     UserAttributesSchema,
+    UserResponseSchema,
 )
 from app.oauth2 import AuthJWT
 from ..config import settings
 from fastapi.responses import JSONResponse
-from jose import jwt, JWTError
 from fastapi_jwt_auth import AuthJWT
 from ..models.firebase_token_schemas import PushTokenSchema
 from .BaseRouter import BaseRouter
@@ -45,7 +44,7 @@ class AuthRouter(BaseRouter):
         ):
             return await self.auth_controller.get_push_token(payload, user)
 
-        @self.router.post("/login")
+        @self.router.post("/login", response_model=UserResponseSchema)
         async def login(payload: LoginUserSchema, Authorize: AuthJWT = Depends()):
             return await self.auth_controller.login_user(payload, Authorize)
 
@@ -56,7 +55,7 @@ class AuthRouter(BaseRouter):
             # If the function returns without error, it means the user is authenticated and verified
             return {"message": "You have access to this protected resource"}
 
-        @self.router.get("/refresh")
+        @self.router.get("/refresh_token")
         def refresh_token(response: Response, Authorize: AuthJWT = Depends()):
             return self.auth_controller.refresh_access_token(response, Authorize)
 
@@ -64,7 +63,7 @@ class AuthRouter(BaseRouter):
         def logout(
             response: Response,
             Authorize: AuthJWT = Depends(),
-            user_id: str = Depends(oauth2.require_user),
+            user_id: str = Depends(self.get_current_user),
         ):
             return self.auth_controller.logout(response, Authorize, user_id)
 

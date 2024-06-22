@@ -4,9 +4,10 @@ from app.serializers.eventSerializers import eventEntity
 from .MongoDBService import MongoDBService
 from ..models.firebase_token_schemas import PushTokenSchema
 from ..database import Push_Token
+from ..service.BaseService import BaseService
 
 
-class PushTokenService(MongoDBService):
+class PushTokenService(BaseService):
     def __init__(self):
         super().__init__(Push_Token)
 
@@ -22,7 +23,7 @@ class PushTokenService(MongoDBService):
 
     async def get_team_player_tokens(self, team_id):
         try:
-            team = await team_service.get_by_id(ObjectId(team_id))
+            team = await self.team_collection.find_one({"_id": ObjectId(team_id)})
 
             if team:
                 players_ids = team["team_players"]

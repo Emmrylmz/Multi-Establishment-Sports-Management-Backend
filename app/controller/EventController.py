@@ -1,8 +1,15 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
-from ..models.event_schemas import CreateEventSchema
+from ..models.event_schemas import (
+    CreateEventSchema,
+    UpdateEventSchema,
+    EventResponseSchema,
+    Event,
+    ListEventResponseSchema,
+)
 from bson import ObjectId
 from .BaseController import BaseController
+from typing import List, Dict, Any
 
 # from ...main import rabbit_client
 
@@ -20,7 +27,7 @@ class EventController(BaseController):
 
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
-        event_data["creator_id"] = ensure_object_id(user["_id"])
+        event_data["creator_name"] = user["name"]
         event_data["team_id"] = self.format_handler(event_data["team_id"])
         # Call to your service layer to save the event asynchronously
         created_event = await self.event_service.create(event_data)
@@ -35,7 +42,7 @@ class EventController(BaseController):
             routing_key=f"team.{event_data['team_id']}.event.created",
             message={"event": created_event, "action": "created"},
         )
-        return created_event
+        return EventResponseSchema(event_id=created_event["_id"], status="created")
 
     async def read_event(self, event_id: str):
         event = await self.event_service.get_by_id(event_id)
@@ -43,22 +50,31 @@ class EventController(BaseController):
             raise HTTPException(status_code=404, detail="Event not found")
         return event
 
-    async def update_event(self, event_id: str, event: CreateEventSchema):
+    async def update_event(self, event_id: str, event: UpdateEventSchema):
         # update
+        data_id = self.format_handler(event_id)
         updated_event = await self.event_service.update(
-            ObjectId(event_id), event.dict(exclude_unset=True)
+            data_id, event.dict(exclude_unset=True)
         )
         if not updated_event:
             raise HTTPException(status_code=404, detail="Event not found")
-        return updated_event
+        return EventResponseSchema(event_id=event_id, status="changed")
 
     async def delete_event(self, event_id: str):
         result = await self.event_service.delete_event(ObjectId(event_id))
         # raise HTTPException(status_code=404, detail="Event not found")
-        return result
+        return EventResponseSchema(event_id=event_id, status="deleted")
 
     async def list_events(self, team_id: str):
-        team_id = ensure_object_id(team_id)
+        team_id = self.format_handler(team_id)
         query = {"team_id": team_id}
         events = await self.event_service.list(query)
-        return events
+        team = await self.team_service.get_by_id(team_id)
+        response = ListEventResponseSchema(team_name=team["team_name"], events=events)
+        return response
+
+    async def get_team_events(self, team_ids: List[str]) -> List[Dict[str, Any]]:
+
+        team_object_ids = [self.format_handler(team_id) for team_id in team_ids]
+
+        return await self.event_service.get_upcoming_events(team_object_ids)

@@ -8,8 +8,6 @@ from fastapi_jwt_auth.exceptions import AuthJWTException
 from app.service.AuthService import AuthService
 
 
-from app.serializers.userSerializer import userEntity
-
 from .config import settings
 
 auth_service = AuthService()

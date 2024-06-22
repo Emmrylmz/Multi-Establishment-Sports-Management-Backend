@@ -1,6 +1,19 @@
 from pydantic import BaseModel, EmailStr, validator, constr, Field
 from typing import List, Optional, Literal
 from datetime import datetime
+from bson.objectid import ObjectId as BsonObjectId
+
+
+class PydanticObjectId(BsonObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not isinstance(v, BsonObjectId):
+            raise TypeError("ObjectId required")
+        return str(v)
 
 
 class CreateUserSchema(BaseModel):
@@ -27,6 +40,28 @@ class CreateUserSchema(BaseModel):
                 "team_ids": ["team_bson_object_id"],
             }
         }
+
+
+class User(BaseModel):
+    _id: str
+    name: str
+    role: Literal["Coach", "Player", "Manager"]
+    email: str
+    teams: List[PydanticObjectId] = []
+
+    class Config:
+        orm_mode = True
+        fields = {"id": "_id"}
+
+
+class UserResponseSchema(BaseModel):
+    status: str
+    access_token: str
+    user: dict
+
+    class Config:
+        orm_mode = True
+        fields = {"id": "_id"}
 
 
 class ContactInfo(BaseModel):
@@ -59,15 +94,6 @@ class UserAttributesSchema(BaseModel):
 class LoginUserSchema(BaseModel):
     email: EmailStr
     password: constr(min_length=8)
-
-
-class UserResponseSchema(BaseModel):
-    name: Optional[str]
-    email: Optional[EmailStr]  # Make email optional if it could be None
-    photo: Optional[str]
-    role: Optional[str]
-    # Remove sensitive data fields from the response model
-    created_at: Optional[datetime]
 
 
 class UserResponse(BaseModel):

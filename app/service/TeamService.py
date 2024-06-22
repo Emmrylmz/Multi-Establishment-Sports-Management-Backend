@@ -13,7 +13,6 @@ from .BaseService import BaseService
 class TeamService(BaseService):
     def __init__(self):
         super().__init__(Team)
-        self.auth_service = self.get_collection("auth")
 
     # def entity(self, document: dict):
     #     # Customize how event documents are transformed before they are returned
@@ -30,8 +29,6 @@ class TeamService(BaseService):
     async def add_users_to_teams(
         self, user_ids, team_ids, user_role_field, register=True
     ):
-        team_ids = [ObjectId(team_id) for team_id in team_ids]
-        user_ids = [ObjectId(user_id) for user_id in user_ids]
 
         try:
             # Get the client from one of the collections
@@ -45,18 +42,17 @@ class TeamService(BaseService):
                         {"$addToSet": {user_role_field: {"$each": user_ids}}},
                         session=session,
                     )
+                    print(teams_update_result)
 
                     # Initialize users_update_result for consistent return structure
                     users_update_result = None
 
                     # Conditionally add teams to users
                     if not register:
-                        users_update_result = (
-                            await self.auth_service.collection.update_many(
-                                {"_id": {"$in": user_ids}},
-                                {"$addToSet": {"teams": {"$each": team_ids}}},
-                                session=session,
-                            )
+                        users_update_result = await self.auth_collection.update_many(
+                            {"_id": {"$in": user_ids}},
+                            {"$addToSet": {"teams": {"$each": team_ids}}},
+                            session=session,
                         )
 
                     # Check results based on the value of register
@@ -96,3 +92,12 @@ class TeamService(BaseService):
             return True
         else:
             return False
+
+    async def get_teams_by_id(self, team_ids):
+        pipeline = [
+            {"$match": {"_id": {"$in": team_ids}}},
+            {"$project": {"_id": 1, "team_name": 1}},
+        ]
+
+        teams = await self.collection.aggregate(pipeline).to_list(length=None)
+        return teams

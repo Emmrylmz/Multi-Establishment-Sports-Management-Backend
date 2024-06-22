@@ -25,5 +25,37 @@ class EventService(MongoDBService):
     #     return super().entity(document)
 
     # Add event-specific methods if necessary
-    def get_upcoming_events(self):
-        return self.list({"start_date": {"$gte": datetime.utcnow()}})
+    async def get_upcoming_events(self, team_object_ids):
+        pipeline = [
+            {"$match": {"team_id": {"$in": team_object_ids}}},
+            {
+                "$lookup": {
+                    "from": "teams",
+                    "localField": "team_id",
+                    "foreignField": "_id",
+                    "as": "team_info",
+                }
+            },
+            {"$unwind": "$team_info"},
+            {
+                "$group": {
+                    "_id": "$team_id",
+                    "team_name": {"$first": "$team_info.team_name"},
+                    "events": {
+                        "$push": {
+                            "event_id": {"$toString": "$_id"},
+                            "event_type": "$event_type",
+                            "place": "$place",
+                            "event_date": "$event_date",
+                            "description": "$description",
+                        }
+                    },
+                }
+            },
+            {"$addFields": {"_id": {"$toString": "$_id"}}},
+            {"$project": {"_id": 1, "team_name": 1, "events": 1}},
+        ]
+
+        result = await self.collection.aggregate(pipeline).to_list(length=None)
+
+        return result

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     ALGORITHM: str
     CLIENT_ORIGIN: str
     RABBITMQ_URL: str
+    FIREBASE_CREDENTIALS_PATH: str
 
     class Config:
         env_file = "./.env"

@@ -2,6 +2,7 @@ from bson import ObjectId
 from fastapi.encoders import jsonable_encoder
 from motor.motor_asyncio import AsyncIOMotorCollection
 from datetime import datetime
+from ..utils import ensure_object_id
 
 
 class MongoDBService:
@@ -12,6 +13,7 @@ class MongoDBService:
         """Creates a new document and stores it in the database asynchronously."""
         data["created_at"] = datetime.utcnow()  # Uncomment to use timestamps
         result = await self.collection.insert_one(data)
+        print(result.inserted_id)
         return await self.get_by_id(result.inserted_id)
 
     async def get_by_id(self, doc_id: str) -> dict:
@@ -25,6 +27,7 @@ class MongoDBService:
 
     async def update(self, doc_id: str, update_data: dict) -> dict:
         """Updates an existing document asynchronously."""
+        update_data["updated_at"] = datetime.utcnow()
         await self.collection.update_one(
             {"_id": ObjectId(doc_id)}, {"$set": update_data}
         )

@@ -5,6 +5,8 @@ from ..models.user_schemas import (
     CreateUserSchema,
     LoginUserSchema,
     UserAttributesSchema,
+    UserResponseSchema,
+    User,
 )
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from datetime import datetime, timedelta
@@ -74,27 +76,26 @@ class AuthController(BaseController):
             )
 
         access_token = Authorize.create_access_token(
-            subject=str(user["id"]),
+            subject=str(user["_id"]),
             expires_time=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRES_IN),
         )
         refresh_token = Authorize.create_refresh_token(
-            subject=str(user["id"]),
+            subject=str(user["_id"]),
             expires_time=timedelta(minutes=settings.REFRESH_TOKEN_EXPIRES_IN),
         )
+        # self.auth_service.update_user_login(user, access_token, refresh_token)
+        user_model = User(
+            id=str(user["_id"]),
+            name=user["name"],
+            role=user["role"],
+            email=user["email"],
+            teams=user["teams"],
+        )
+        user_response = UserResponseSchema(
+            status="success", access_token=access_token, user=user_model
+        )
 
-        # auth_service.update_user_login(user, access_token, refresh_token)
-
-        return {
-            "status": "success",
-            "access_token": access_token,
-            "user": {
-                "id": user["id"],
-                "name": user["name"],
-                "role": user["role"],
-                "photo": user["photo"],
-                "email": user["email"],
-            },
-        }
+        return user_response
 
     # Similarly implement refresh_token and logout methods
     def refresh_access_token(self, response: Response, Authorize):
@@ -106,7 +107,7 @@ class AuthController(BaseController):
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not refresh access token",
                 )
-            user = selfauth_service.get_user_by_id(user_id)
+            user = self.auth_service.get_user_by_id(user_id)
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -150,7 +151,7 @@ class AuthController(BaseController):
         )
         return {"access_token": access_token}
 
-    async def logout(self, response: Response, Authorize, user_id: str):
+    def logout(self, response: Response, Authorize, user_id: str):
         Authorize.unset_jwt_cookies()
         response.set_cookie("logged_in", "", -1)
         return {"status": "success"}
@@ -159,10 +160,9 @@ class AuthController(BaseController):
         self, payload: PushTokenSchema, user: dict = Depends(require_user)
     ):
         try:
-            # Assuming user is a dict and user['_id'] exists
-            user_id = user["_id"]  # Ensure this is the correct key for user ID
-            result = await self, push_token_service.save_token(payload, user_id)
-            return {"result": payload.dict()}  # Return payload as a dictionary
+            user_id = user["_id"]
+            result = await self.token_service.save_token(payload, user_id)
+            return {"result": payload.dict()}
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 

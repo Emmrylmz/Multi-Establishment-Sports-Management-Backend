@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from bson.objectid import ObjectId
 import struct
 import pydantic
@@ -47,4 +47,28 @@ class CreateEventSchema(BaseModel):
 
 
 class ListTeamEventSchema(BaseModel):
-    team_id: str
+    team_id: List[str]
+
+
+class UpdateEventSchema(BaseModel):
+    event_date: Optional[datetime]  # corrected from event_data
+    place: Optional[str]
+    event_type: Optional[str]
+    description: Optional[str]
+
+
+class EventResponseSchema(BaseModel):
+    event_id: str
+    status: str
+
+
+class Event(BaseModel):
+    event_type: str
+    place: str
+    event_date: datetime  # corrected from event_data
+    description: str
+
+
+class ListEventResponseSchema(BaseModel):
+    team_name: str
+    events: List[Event]

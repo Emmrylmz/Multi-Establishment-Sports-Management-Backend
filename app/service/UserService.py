@@ -1,6 +1,5 @@
 # app/services/user_service.py
 from fastapi import Depends
-from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from datetime import datetime
 from bson import ObjectId

@@ -7,6 +7,7 @@ from app.routers.team import team_router
 from app.routers.user import user_router
 from app.tools.RabbitClient import RabbitClient
 from app.service.FirebaseService import FirebaseService
+import os
 
 
 class FooApp(FastAPI):
@@ -16,12 +17,10 @@ class FooApp(FastAPI):
         self.firebase_service = FirebaseService(firebase_cred_path)
 
 
-path = r"C:\Users\emmry\OneDrive\Masaüstü\DACKA-App\server\app-fastapi\app\service\firbaseKey.json"
-
-url = "amqp://guest:guest@localhost:5672//"
+url = "amqp://guest:guest@rabbitmq:5672/"
 app = FooApp(
     rabbit_url=url,
-    firebase_cred_path=path,
+    firebase_cred_path="app/service/firebaseKey.json",
     database_uri=settings.DATABASE_URL,
 )
 
@@ -51,11 +50,11 @@ async def startup_event():
     # Connect to RabbitMQ
     app.firebase_service.init_firebase()
     await app.rabbit_client.start()
-    # await app.rabbit_client.declare_and_bind_queue(
-    #     queue_name="663be0c3b6f73eaa9b08b048",
-    #     routing_keys=["team.663be0c3b6f73eaa9b08b048.event.*"],
-    # )
-    await app.rabbit_client.start_consumer("66420eb2e00fde33e4329b05")
+    await app.rabbit_client.declare_and_bind_queue(
+        queue_name="664b346f904d48bc59f606b8",
+        routing_keys=["team.663be0c3b6f73eaa9b08b048.event.*"],
+    )
+    await app.rabbit_client.start_consumer("664b346f904d48bc59f606b8")
 
 
 @app.on_event("shutdown")

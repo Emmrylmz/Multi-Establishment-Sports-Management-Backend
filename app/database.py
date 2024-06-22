@@ -3,15 +3,18 @@ import asyncio
 from app.config import settings
 
 
-client = AsyncIOMotorClient(settings.DATABASE_URL, serverSelectionTimeoutMS=5000)
+db = AsyncIOMotorClient(
+    "mongodb+srv://banleue13:Mrfadeaway.1@cluster0.lvzd0dt.mongodb.net/?retryWrites=true&w=majority",
+    serverSelectionTimeoutMS=5000,
+)
 try:
     # Attempt to get server information asynchronously
-    conn = client.admin.command("ismaster")
+    conn = db.admin.command("ismaster")
     print(f'Connected to MongoDB {conn.get("version", "Unknown version")}')
 except Exception as e:
     print(f"Unable to connect to the MongoDB server: {e}")
 
-db = client[settings.MONGO_INITDB_DATABASE]
+# db = client[settings.MONGO_INITDB_DATABASE]
 Auth = db.auth
 Event = db.events
 Team = db.teams
