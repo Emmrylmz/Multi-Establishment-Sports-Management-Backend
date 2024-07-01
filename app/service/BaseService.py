@@ -1,27 +1,24 @@
-from .MongoDBService import MongoDBService
 from motor.motor_asyncio import AsyncIOMotorCollection
-from ..database import Auth, Event, Team, Push_Token, User_Info
+from .MongoDBService import MongoDBService
+from ..database import get_collection
 
 
-class BaseService(MongoDBService):
-    def __init__(self, collection: AsyncIOMotorCollection) -> None:
-        super().__init__(collection)
-        self.auth_collection = Auth
-        self.event_collection = Event
-        self.team_collection = Team
-        self.push_token_collection = Push_Token
-        self.user_info_collection = User_Info
+class BaseService:
+    def __init__(self):
+        self.collections = {
+            "Auth": get_collection("Auth"),
+            "Event": get_collection("Event"),
+            "Team": get_collection("Teams"),
+            "Push_Token": get_collection("Push_Token"),
+            "User_Info": get_collection("User_Info"),
+        }
 
-    def get_collection(self, collection_name: str) -> AsyncIOMotorCollection:
-        if collection_name == "auth":
-            return self.auth_collection
-        elif collection_name == "event":
-            return self.event_collection
-        elif collection_name == "team":
-            return self.team_collection
-        elif collection_name == "push_token":
-            return self.push_token_collection
-        elif collection_name == "user_info":
-            return self.user_info_collection
+    def get_from_collections(self, collection_name: str) -> AsyncIOMotorCollection:
+        if collection_name in self.collections:
+            return self.collections[collection_name]
         else:
             raise ValueError("Invalid collection name")
+
+
+def get_base_service():
+    return BaseService()

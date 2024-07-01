@@ -20,13 +20,15 @@ from bson import ObjectId, json_util
 from fastapi.encoders import jsonable_encoder
 from ..service.BaseService import BaseService
 from ..service.TokenService import PushTokenService
+from fastapi import Depends
+from ..dependencies.service_dependencies import get_push_token_service
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
-class RabbitClient(BaseService):
+class RabbitClient:
     """This class implements RabbitMQ Publish and Subscribe async handling.
 
     The RabbitMQ queue mechanism is used so that we can take advantage of
@@ -61,7 +63,9 @@ class RabbitClient(BaseService):
         self.message_handler = self._process_incoming_message
         self.exchange = None
         self.exchange_name = exchange_name
-        self.push_token_service = PushTokenService()  # Initialize PushTokenService
+        self.push_token_service = Depends(get_push_token_service)
+
+    # Initialize PushTokenService
 
     # ---------------------------------------------------------
     #

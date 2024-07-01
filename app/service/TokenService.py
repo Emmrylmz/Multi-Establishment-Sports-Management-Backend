@@ -1,15 +1,22 @@
 from bson import ObjectId
-from pymongo.collection import Collection
-from app.serializers.eventSerializers import eventEntity
-from .MongoDBService import MongoDBService
+from fastapi import Depends
+from motor.motor_asyncio import AsyncIOMotorCollection
 from ..models.firebase_token_schemas import PushTokenSchema
-from ..database import Push_Token
-from ..service.BaseService import BaseService
+from .MongoDBService import MongoDBService
+from .BaseService import BaseService
+from ..database import get_collection
 
 
-class PushTokenService(BaseService):
-    def __init__(self):
-        super().__init__(Push_Token)
+class PushTokenService(MongoDBService):
+    def __init__(
+        self,
+        collection: AsyncIOMotorCollection = Depends(
+            lambda: get_collection("Push_Token")
+        ),
+    ):
+        self.collection = collection
+        self.team_collection = get_collection("Team")
+        super().__init__(self.collection)
 
     async def save_token(self, payload: PushTokenSchema, user_id: str):
         data = payload.dict()
@@ -24,27 +31,18 @@ class PushTokenService(BaseService):
     async def get_team_player_tokens(self, team_id):
         try:
             team = await self.team_collection.find_one({"_id": ObjectId(team_id)})
-
             if team:
                 players_ids = team["team_players"]
                 object_ids = [ObjectId(id) for id in players_ids]
                 query = {"_id": {"$in": object_ids}}
                 documents = await self.list(query=query)
-                # Extract tokens, ensuring each player has a token attribute
                 tokens = [player["token"] for player in documents if "token" in player]
-
                 return tokens
             else:
                 return {"team not found"}
-        except Exception as e:
-            # Handle possible exceptions
-            print(f"An error occurred: {e}")
-            return []
         except KeyError as e:
-            # Handle cases where expected keys are missing in the data
             print(f"Key error: {e} - Check data integrity")
             return []
         except Exception as e:
-            # Generic exception handling to catch unexpected errors
             print(f"An error occurred: {e}")
             return []

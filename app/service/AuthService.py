@@ -1,21 +1,27 @@
 # app/services/user_service.py
-from fastapi import Depends, status
+from fastapi import Depends, status, HTTPException
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from .BaseService import BaseService
-from ..database import Auth
+from .BaseService import get_base_service, BaseService
+from ..database import get_collection
 from pymongo.collection import Collection
+from motor.motor_asyncio import AsyncIOMotorCollection
+from ..service.MongoDBService import MongoDBService
 
 
-class AuthService(BaseService):
-    def __init__(self):
-        super().__init__(Auth)
+class AuthService(MongoDBService):
+    def __init__(
+        self,
+        collection: AsyncIOMotorCollection = Depends(lambda: get_collection("Auth")),
+    ):
+        self.collection = collection
+        super().__init__(self.collection)
 
     async def check_user_exists(self, email: str):
-        response = await self.auth_collection.find_one({"email": email.lower()})
+        response = await self.collection.find_one({"email": email.lower()})
         if response:
             print(f"User found: {response}")  # Debug logging
             return response
@@ -25,7 +31,7 @@ class AuthService(BaseService):
 
     async def verify_user_credentials(self, email: str, password: str):
 
-        user = await self.auth_collection.find_one({"email": email.lower()})
+        user = await self.collection.find_one({"email": email.lower()})
         jls_extract_var = user
         if not user or not utils.verify_password(password, jls_extract_var["password"]):
 
@@ -33,14 +39,25 @@ class AuthService(BaseService):
 
         return user
 
-    def validate_role(self, user, role):
+    from fastapi import HTTPException, status
+
+    async def validate_role(self, user_id, role):
         # Check if the user object is None
+        user = await self.get_by_id(ObjectId(user_id))
         if user is None:
-            raise ValueError("No user data available to validate role")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No user data available to validate role",
+            )
 
         # Now check the role
         if user.get("role") != role:
-            raise ValueError(f"User role does not match required role: {role}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"User role does not match required role: {role}",
+            )
+
+        return user
 
     async def check_role(self, user_id):
         # Check if the user object is None

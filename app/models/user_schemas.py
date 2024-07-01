@@ -57,6 +57,7 @@ class User(BaseModel):
 class UserResponseSchema(BaseModel):
     status: str
     access_token: str
+    refresh_token: str
     user: dict
 
     class Config:
@@ -77,6 +78,7 @@ class ContactPerson(ContactInfo):
 
 
 class UserAttributesSchema(BaseModel):
+    name: str
     age: int
     height: float
     weight: float
@@ -99,3 +101,6 @@ class LoginUserSchema(BaseModel):
 class UserResponse(BaseModel):
     status: str
     user: UserResponseSchema
+
+class UserInfoByIdSchema(BaseModel):
+    user_id: str

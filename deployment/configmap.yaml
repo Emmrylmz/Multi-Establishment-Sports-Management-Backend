@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-config
+data:
+  DATABASE_URL: "mongodb+srv://banleue13:Mrfadeaway.1@cluster0.lvzd0dt.mongodb.net/?retryWrites=true&w=majority"
+  MONGO_INITDB_DATABASE: "DACKA"
+  REFRESH_TOKEN_EXPIRES_IN: "400"
+  ACCESS_TOKEN_EXPIRES_IN: "400"
+  ALGORITHM: "RS256"
+  RABBITMQ_URL: "amqp://admin:password@rabbitmq.rabbitmq-cluster.svc.cluster.local:5672/"
+  FIREBASE_CREDENTIALS_PATH: "/service/firebaseKey.json"
+  CLIENT_ORIGIN: "http://localhost:3000"

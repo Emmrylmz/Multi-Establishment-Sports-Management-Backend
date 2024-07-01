@@ -1,22 +1,32 @@
 import firebase_admin
 from firebase_admin import credentials, exceptions
-from ..database import Push_Token
+from ..database import get_collection
 from .BaseService import BaseService
 import os
+from motor.motor_asyncio import AsyncIOMotorCollection
+from fastapi import Depends
+from ..service.MongoDBService import MongoDBService
+from ..config import settings
+from .BaseService import get_base_service
 
 
-class FirebaseService(BaseService):
-    def __init__(self, cred_path: str):
-        super().__init__(Push_Token)
+class FirebaseService(MongoDBService):
+    def __init__(
+        self,
+        cred_path: str = settings.FIREBASE_CREDENTIALS_PATH,
+        collection: AsyncIOMotorCollection = Depends(
+            lambda: get_collection("Push_Token")
+        ),
+    ):
+        self.collection = collection
+        super().__init__(self.collection)
         self.cred_path = cred_path
         self.firebase_app = None
         self.init_firebase()
 
     def init_firebase(self):
         try:
-            # Load the credentials and initialize the Firebase app
             cred = credentials.Certificate(self.cred_path)
-            # Check if app is already initialized to prevent re-initialization errors
             if not firebase_admin._apps:
                 self.firebase_app = firebase_admin.initialize_app(cred)
                 print("Firebase app initialized:", self.firebase_app.name)
@@ -28,7 +38,6 @@ class FirebaseService(BaseService):
 
     def delete_firebase_app(self):
         if self.firebase_app:
-            # Delete the Firebase app instance
             firebase_admin.delete_app(self.firebase_app)
             print("Firebase app deleted successfully.")
             self.firebase_app = None

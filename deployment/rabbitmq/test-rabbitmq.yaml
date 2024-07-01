@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rabbitmq-connection-test
+  namespace: rabbitmq-cluster
+spec:
+  containers:
+  - name: curl
+    image: curlimages/curl:7.68.0
+    command: ["sh", "-c", "curl rabbitmq-service.rabbitmq-cluster.svc.cluster.local:5672"]

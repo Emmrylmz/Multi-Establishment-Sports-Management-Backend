@@ -1,0 +1,24 @@
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rabbitmq-ingress
+  namespace: rabbitmq-cluster
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  rules:
+    - host: web.rabbitmq.com  # Replace with your domain
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rabbitmq  # Ensure this matches the Service name
+                port:
+                  number: 15672  # Replace with your RabbitMQ management UI port
+  tls:
+    - hosts:
+        - web.rabbitmq.com  # Replace with your domain
+      secretName: rabbitmq-tls  # Replace with your TLS secret name
