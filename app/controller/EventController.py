@@ -7,6 +7,7 @@ from ..models.event_schemas import (
     Event,
     ListEventResponseSchema,
 )
+from ..models.attendance_schemas import AttendanceFormSchema
 from bson import ObjectId
 from .BaseController import BaseController
 from typing import List, Dict, Any
@@ -115,3 +116,26 @@ class EventController(BaseController):
         team = await self.team_service.get_by_id(team_id)
         response = ListEventResponseSchema(team_name=team["team_name"], events=events)
         return response
+
+    async def add_attendance(self, attendance_form: AttendanceFormSchema):
+
+        event_id = attendance_form.event_id
+        attendances = attendance_form.attendances
+        event_type = attendance_form.event_type
+        team_id = attendance_form.team_id
+        try:
+            await self.event_service.add_attendance(
+                event_id, attendances, event_type, team_id
+            )
+            await self.event_service.update_attendance_counts(
+                event_type=event_type, attendances=attendances
+            )
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"An error occurred while processing attendance: {str(e)}",
+            )
+
+        return {"message": "Attendance records added successfully"}
