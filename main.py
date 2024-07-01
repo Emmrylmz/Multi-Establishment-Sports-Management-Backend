@@ -18,11 +18,10 @@ class FooApp(FastAPI):
         self.firebase_service = FirebaseService(firebase_cred_path)
 
 
-# url = "amqp://admin:password@rabbitmq.rabbitmq-cluster.svc.cluster.local:5672/"
 url = settings.RABBITMQ_URL
 app = FooApp(
     rabbit_url=url,
-    firebase_cred_path="app/service/firebaseKey.json",
+    firebase_cred_path=settings.FIREBASE_CREDENTIALS_PATH,
     database_uri=settings.DATABASE_URL,
 )
 
