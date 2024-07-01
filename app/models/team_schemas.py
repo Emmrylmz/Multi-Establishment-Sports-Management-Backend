@@ -46,3 +46,7 @@ class UserInsert(BaseModel):
 
 class TeamPlayers(BaseModel):
     team_id: str
+
+
+class TeamQueryById(BaseModel):
+    team_ids: List[str]

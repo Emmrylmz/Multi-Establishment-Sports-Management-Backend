@@ -18,7 +18,10 @@ from datetime import datetime
 from ..utils import ensure_object_id, DateTimeEncoder
 from bson import ObjectId, json_util
 from fastapi.encoders import jsonable_encoder
-
+from ..service.BaseService import BaseService
+from ..service.TokenService import PushTokenService
+from fastapi import Depends
+from ..dependencies.service_dependencies import get_push_token_service
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -49,7 +52,6 @@ class RabbitClient:
         exchange_name: str = "notifications_exchange12",
     ):
         """The class initializer.
-
         :param rabbit_url: RabbitMQ's connection URL.
         :param service: Name of message subscription queue.
         :param incoming_message_handler: Received message callback method.
@@ -61,6 +63,9 @@ class RabbitClient:
         self.message_handler = self._process_incoming_message
         self.exchange = None
         self.exchange_name = exchange_name
+        self.push_token_service = Depends(get_push_token_service)
+
+    # Initialize PushTokenService
 
     # ---------------------------------------------------------
     #
@@ -73,9 +78,9 @@ class RabbitClient:
         try:
             message_body = message.body.decode()  # Decode bytes to string
             data = json.loads(message_body)
-            event = data["event"].get("team_id")
-            print(type(event))
-            await self.handle_push_notification(event)
+            team_id = data["event"].get("team_id")
+            event = data["event"]
+            await self.handle_push_notification(event, team_id)
 
             logging.debug(f"Received the message: {data}")
             await message.ack()
@@ -87,11 +92,13 @@ class RabbitClient:
         except Exception as e:
             logging.error(f"Failed to process message: {str(e)}")
 
-    async def handle_push_notification(self, data):
+    async def handle_push_notification(self, data, team_id):
         # Here you'd use the details from `data` to create your push message
         logging.debug(f"Received data for push notification: {data}")
         try:
-            expo_ids = await push_token_service.get_team_player_tokens(team_id=data)
+            expo_ids = await self.push_token_service.get_team_player_tokens(
+                team_id=team_id
+            )
             # Prepare an array of PushMessage objects
             print(expo_ids)
             push_messages = [
@@ -99,7 +106,16 @@ class RabbitClient:
                     to=token,
                     title="New Message From Your Coach !!",
                     body="Check it out that",
-                    data={"message": data},
+                    data=data,
+                    sound="default",
+                    ttl=0,
+                    expiration=None,
+                    priority="default",
+                    badge=None,
+                    category="EventDetailPage",
+                    channel_id=None,
+                    subtitle=None,
+                    mutable_content=False,
                 )
                 for token in expo_ids
             ]

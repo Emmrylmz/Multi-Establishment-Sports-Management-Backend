@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wait-for-it
+  namespace: default  # Adjust this if you're using a different namespace
+data:
+  wait-for-it.sh: |
+    #!/usr/bin/env bash
+    # Use this script to test if a given TCP host/port are available
+    # https://github.com/vishnubob/wait-for-it
+
+    TIMEOUT=15
+    QUIET=0
+    HOST=$1
+    PORT=$2
+
+    while [[ $TIMEOUT -gt 0 ]]; do
+      nc -z $HOST $PORT > /dev/null 2>&1
+      if [[ $? -eq 0 ]]; then
+        exit 0
+      fi
+      sleep 1
+      TIMEOUT=$((TIMEOUT-1))
+    done
+
+    exit 1

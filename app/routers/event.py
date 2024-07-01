@@ -1,45 +1,77 @@
 from fastapi import APIRouter, status, Depends, HTTPException, Request
 from ..controller.EventController import EventController
-from ..models.event_schemas import CreateEventSchema, ListTeamEventSchema
+from ..models.event_schemas import (
+    CreateEventSchema,
+    ListTeamEventSchema,
+    UpdateEventSchema,
+    EventResponseSchema,
+)
 from ..oauth2 import require_user
-from .BaseRouter import BaseRouter
+from .BaseRouter import BaseRouter, get_base_router
+from fastapi_jwt_auth import AuthJWT
+
+router = APIRouter()
 
 
-class EventRouter(BaseRouter):
-    def __init__(self) -> None:
-        super().__init__()
-        self.router = APIRouter()
-        self._init_routes()
-
-    def _init_routes(self) -> None:
-        @self.router.post(
-            "/create",
-            status_code=status.HTTP_201_CREATED,
-        )
-        async def create_event(
-            payload: CreateEventSchema,
-            request: Request,
-            user: dict = Depends(require_user),
-        ):
-            return await self.event_controller.create_event(payload, request, user)
-
-        @self.router.get("/{event_id}")
-        async def get_event(event_id: str):
-            return await self.event_controller.read_event(event_id)
-
-        @self.router.delete(
-            "/delete/{event_id}", status_code=status.HTTP_204_NO_CONTENT
-        )
-        async def delete_event(event_id: str):
-            return await self.event_controller.delete_event(event_id)
-
-        @self.router.post("/list")
-        async def list_events(request: ListTeamEventSchema):
-            return await self.event_controller.list_events(request.team_id)
-
-        @self.router.post("/update/{event_id}", status_code=status.HTTP_204_NO_CONTENT)
-        async def update_event(event_id: str, payload: CreateEventSchema):
-            return await self.event_controller.update_event(event_id, payload)
+@router.post(
+    "/create",
+    status_code=status.HTTP_201_CREATED,
+    response_model=EventResponseSchema,
+)
+async def create_event(
+    payload: CreateEventSchema,
+    request: Request,
+    user_id: str = Depends(require_user),
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.create_event(payload, request, user_id)
 
 
-event_router = EventRouter().router
+@router.get("/{event_id}", status_code=status.HTTP_200_OK)
+async def get_event(
+    event_id: str,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.read_event(event_id)
+
+
+@router.delete(
+    "/delete/{event_id}",
+    response_model=EventResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def delete_event(
+    event_id: str,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.delete_event(event_id)
+
+
+# @router.post("/list")
+# async def list_events(
+#     request: ListTeamEventSchema,
+#     base_router: BaseRouter = Depends(get_base_router),
+# ):
+#     return await base_router.event_controller.list_events(request.team_id)
+
+
+@router.post(
+    "/update/{event_id}",
+    response_model=EventResponseSchema,
+    status_code=status.HTTP_200_OK,
+)
+async def update_event(
+    event_id: str,
+    payload: UpdateEventSchema,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.update_event(event_id, payload)
+
+
+@router.post("/get_team_events")
+async def fetch_team_events(
+    team_ids: ListTeamEventSchema,
+    user_id: str = Depends(require_user),
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.get_team_events(team_ids.team_id)

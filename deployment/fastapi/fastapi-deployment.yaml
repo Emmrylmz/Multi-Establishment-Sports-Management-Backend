@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-deployment
+  labels:
+    app: fastapi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi
+  template:
+    metadata:
+      labels:
+        app: fastapi
+    spec:
+      containers:
+      - name: fastapi
+        image: myacrregistry.azurecr.io/my-fastapi-app:latest
+        imagePullPolicy: Always
+        command: ["sh", "-c", "./wait-for-it.sh rabbitmq.rabbitmq-cluster.svc.cluster.local:5672 -- uvicorn main:app --host 0.0.0.0 --port 80"]
+        ports:
+        - containerPort: 80
+        env:
+        - name: MONGO_INITDB_DATABASE
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: MONGO_INITDB_DATABASE
+        - name: CLIENT_ORIGIN
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: CLIENT_ORIGIN
+        - name: ALGORITHM
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: ALGORITHM
+        - name: ACCESS_TOKEN_EXPIRES_IN
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: ACCESS_TOKEN_EXPIRES_IN
+        - name: REFRESH_TOKEN_EXPIRES_IN
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: REFRESH_TOKEN_EXPIRES_IN
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: DATABASE_URL
+        - name: RABBITMQ_URL
+          value: "amqp://admin:password@rabbitmq.rabbitmq-cluster.svc.cluster.local:5672/"
+        - name: FIREBASE_CREDENTIALS_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: fastapi-config
+              key: FIREBASE_CREDENTIALS_PATH
+        - name: MONGO_INITDB_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: fastapi-secrets
+              key: MONGO_INITDB_ROOT_USERNAME
+        - name: MONGO_INITDB_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: fastapi-secrets
+              key: MONGO_INITDB_ROOT_PASSWORD
+        - name: JWT_PRIVATE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: fastapi-secrets
+              key: JWT_PRIVATE_KEY
+        - name: JWT_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: fastapi-secrets
+              key: JWT_PUBLIC_KEY
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: firebase-credentials
+          mountPath: /service/firebaseKey.json
+          subPath: firebaseKey.json
+        - name: wait-for-it
+          mountPath: /wait-for-it.sh
+          subPath: wait-for-it.sh
+          readOnly: true
+      volumes:
+      - name: firebase-credentials
+        configMap:
+          name: firebase-config
+      - name: wait-for-it
+        configMap:
+          name: wait-for-it

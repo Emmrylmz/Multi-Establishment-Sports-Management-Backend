@@ -1,28 +1,40 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
-from ..oauth2 import require_user
-from ..models.event_schemas import CreateEventSchema
+from ..models.event_schemas import (
+    CreateEventSchema,
+    UpdateEventSchema,
+    EventResponseSchema,
+    Event,
+    ListEventResponseSchema,
+)
 from bson import ObjectId
-from ..utils import ensure_object_id
 from .BaseController import BaseController
+from typing import List, Dict, Any
+from ..service import EventService, AuthService
+import logging
 
 # from ...main import rabbit_client
 
 
 class EventController(BaseController):
+    def __init__(self, event_service: EventService, auth_service: AuthService):
+        super().__init__()  # This initializes the BaseController
+        self.event_service = event_service
+        self.auth_service = auth_service
+
     async def create_event(
         self,
         event: CreateEventSchema,
         request: Request,
-        user: dict = Depends(require_user),
+        user_id: str,
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
-        self.auth_service.validate_role(user=user, role="Coach")
+        user = await self.auth_service.validate_role(user_id, role="Coach")
 
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
-        event_data["creator_id"] = ensure_object_id(user["_id"])
+        event_data["creator_name"] = user["name"]
         event_data["team_id"] = self.format_handler(event_data["team_id"])
         # Call to your service layer to save the event asynchronously
         created_event = await self.event_service.create(event_data)
@@ -37,7 +49,7 @@ class EventController(BaseController):
             routing_key=f"team.{event_data['team_id']}.event.created",
             message={"event": created_event, "action": "created"},
         )
-        return created_event
+        return EventResponseSchema(event_id=created_event["_id"], status="created")
 
     async def read_event(self, event_id: str):
         event = await self.event_service.get_by_id(event_id)
@@ -45,25 +57,61 @@ class EventController(BaseController):
             raise HTTPException(status_code=404, detail="Event not found")
         return event
 
-    async def update_event(self, event_id: str, event: CreateEventSchema):
+    async def update_event(self, event_id: str, event: UpdateEventSchema):
         # update
+        data_id = self.format_handler(event_id)
         updated_event = await self.event_service.update(
-            ObjectId(event_id), event.dict(exclude_unset=True)
+            data_id, event.dict(exclude_unset=True)
         )
         if not updated_event:
             raise HTTPException(status_code=404, detail="Event not found")
-        return updated_event
+        return EventResponseSchema(event_id=event_id, status="changed")
 
     async def delete_event(self, event_id: str):
-        result = await self.event_service.delete_event(ObjectId(event_id))
+        result = await self.event_service.delete(ObjectId(event_id))
         # raise HTTPException(status_code=404, detail="Event not found")
-        return result
+        return EventResponseSchema(event_id=event_id, status="deleted")
 
     async def list_events(self, team_id: str):
-        team_id = ensure_object_id(team_id)
+        logging.debug(
+            f"list_events called with team_id: {team_id} of type {type(team_id)}"
+        )
+
+        if isinstance(team_id, list):
+            logging.error(f"Invalid team_id type: {type(team_id)}, value: {team_id}")
+            raise HTTPException(status_code=400, detail="Invalid team_id format")
+
+        team_id = self.format_handler(team_id)
         query = {"team_id": team_id}
         events = await self.event_service.list(query)
-        return events
+        team = await self.team_service.get_by_id(team_id)
+        response = ListEventResponseSchema(team_name=team["team_name"], events=events)
+        return response
 
+    async def get_team_events(self, team_ids: List[str]) -> List[Dict[str, Any]]:
+        logging.debug(f"get_team_events called with team_ids: {team_ids}")
 
-# , user: dict = Depends(require_user)
+        # Validate and convert team_ids to ObjectIds
+        try:
+            team_object_ids = [ObjectId(team_id) for team_id in team_ids]
+        except Exception as e:
+            logging.error(f"Error converting team_ids to ObjectId: {e}")
+            raise HTTPException(status_code=400, detail=f"Invalid team_id format: {e}")
+
+        return await self.event_service.get_upcoming_events(team_object_ids)
+
+    async def list_events(self, team_id: str):
+        logging.debug(
+            f"list_events called with team_id: {team_id} of type {type(team_id)}"
+        )
+
+        if isinstance(team_id, list):
+            logging.error(f"Invalid team_id type: {type(team_id)}, value: {team_id}")
+            raise HTTPException(status_code=400, detail="Invalid team_id format")
+
+        team_id = self.format_handler(team_id)
+        query = {"team_id": team_id}
+        events = await self.event_service.list(query)
+        team = await self.team_service.get_by_id(team_id)
+        response = ListEventResponseSchema(team_name=team["team_name"], events=events)
+        return response

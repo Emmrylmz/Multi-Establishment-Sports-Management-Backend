@@ -1,22 +1,40 @@
 # app/services/user_service.py
 from fastapi import Depends
-from app.serializers.userSerializer import userEntity, userResponseEntity
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
 from .BaseService import BaseService
-from ..database import User_Info
 from pymongo.collection import Collection
+from motor.motor_asyncio import AsyncIOMotorCollection
+from ..service.MongoDBService import MongoDBService
+from ..database import get_collection
 
 
-class UserService(BaseService):
-    def __init__(self):
-        super().__init__(User_Info)
+class UserService(MongoDBService):
+    def __init__(
+        self,
+        collection: AsyncIOMotorCollection = Depends(
+            lambda: get_collection("User_Info")
+        ),
+    ):
+        self.collection = collection
+        self.collection = get_collection("User_Info")
+        super().__init__(self.collection)
+
+    async def get_users_by_id(self, player_ids):
+        # Query all users at once using the $in operator
+        cursor = self.collection.find(
+            {"_id": {"$in": player_ids}}, {"name": 1, "photo": 1, "_id": 1}
+        )
+
+        # Convert cursor to list
+        user_infos = await cursor.to_list(length=None)
+
+        return user_infos
 
 
-# @staticmethod
 # def get_current_user(token: str = Depends(user_service.get_current_user_token)):
 #     """
 

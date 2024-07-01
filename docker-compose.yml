@@ -1,25 +1,28 @@
-version: '3'
+version: '3.8'
+
 services:
   mongo:
-    image: mongo:latest
+    image: emmryilmaz/dacka-server:mongo
     container_name: mongo
     env_file:
       - ./.env
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
-      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_INITDB_ROOT_USERNAME}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_INITDB_ROOT_PASSWORD}
+      - MONGO_INITDB_DATABASE=${MONGO_INITDB_DATABASE}
     volumes:
       - mongo_data:/data/db
     ports:
       - '6000:27017'
+    networks:
+      - default
 
   rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: 'rabbitmq'
+    image: emmryilmaz/dacka-server:rabbitmq
+    container_name: rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: "guest"
-      RABBITMQ_DEFAULT_PASS: "guest"
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     ports:
@@ -27,7 +30,35 @@ services:
       - '15672:15672'   # Management interface
     tty: true
     stdin_open: true
-    hostname: "0.0.0.0"
+    networks:
+      - default
+
+  fastapi:
+    image: emmryilmaz/dacka-server:fastapi-app
+    container_name: fastapi
+    env_file:
+      - ./.env
+    environment:
+      - FIREBASE_CREDENTIALS_PATH=/service/firebaseKey.json
+      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
+      - JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGO_INITDB_DATABASE=${MONGO_INITDB_DATABASE}
+      - CLIENT_ORIGIN=${CLIENT_ORIGIN}
+      - ALGORITHM=${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRES_IN=${ACCESS_TOKEN_EXPIRES_IN}
+      - REFRESH_TOKEN_EXPIRES_IN=${REFRESH_TOKEN_EXPIRES_IN}
+      - RABBITMQ_URL=${RABBITMQ_URL}
+    volumes:
+      - .:/app
+    ports:
+      - '80:80'
+    depends_on:
+      - mongo
+      - rabbitmq
+    entrypoint: ["bash", "/app/wait-for-it.sh", "rabbitmq:5672", "--", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80"]
+    networks:
+      - default
 
 volumes:
   mongo_data:
