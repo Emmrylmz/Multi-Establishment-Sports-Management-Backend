@@ -23,6 +23,18 @@ async def connect_to_mongo():
     except Exception as e:
         print(f"Unable to connect to the MongoDB server: {e}")
 
+    return db
+
+
+async def get_initial_data() -> list:
+    collection = get_collection(
+        "Team"
+    )  # Ensure this matches your actual collection name
+    initial_data = await collection.find({}, {"_id": 1}).to_list(
+        length=None
+    )  # Fetch up to 100 documents, adjust as needed
+    return initial_data
+
 
 async def close_mongo_connection():
     db.client.close()

@@ -8,12 +8,7 @@ from ..database import get_collection
 
 
 class PushTokenService(MongoDBService):
-    def __init__(
-        self,
-        collection: AsyncIOMotorCollection = Depends(
-            lambda: get_collection("Push_Token")
-        ),
-    ):
+    def __init__(self, collection: AsyncIOMotorCollection):
         self.collection = collection
         self.team_collection = get_collection("Team")
         super().__init__(self.collection)

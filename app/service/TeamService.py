@@ -87,3 +87,7 @@ class TeamService(MongoDBService):
         ]
         teams = await self.collection.aggregate(pipeline).to_list(length=None)
         return teams
+
+    async def get_all_teams(self):
+        teams = await self.collection.find({}, {"_id": 1})
+        return teams

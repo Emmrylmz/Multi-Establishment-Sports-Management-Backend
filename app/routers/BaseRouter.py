@@ -27,7 +27,7 @@ class BaseRouter:
         team_service: TeamService = Depends(get_team_service),
         event_service: EventService = Depends(get_event_service),
     ) -> None:
-        self.auth_controller = AuthController(auth_service)
+        self.auth_controller = AuthController(auth_service, token_service)
         self.user_controller = UserController(user_service)
         self.team_controller = TeamController(team_service, auth_service, user_service)
         self.event_controller = EventController(event_service, auth_service)

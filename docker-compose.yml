@@ -18,7 +18,7 @@ services:
       - default
 
   rabbitmq:
-    image: emmryilmaz/dacka-server:rabbitmq
+    image: rabbitmq:3-management
     container_name: rabbitmq
     environment:
       - RABBITMQ_DEFAULT_USER=guest

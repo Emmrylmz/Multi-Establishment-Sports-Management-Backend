@@ -11,7 +11,7 @@ from ..service.AuthService import AuthService
 
 def get_push_token_service(
     push_token_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("Push_token")
+        lambda: get_collection("Push_Token")
     ),
 ) -> PushTokenService:
     return PushTokenService(push_token_collection)

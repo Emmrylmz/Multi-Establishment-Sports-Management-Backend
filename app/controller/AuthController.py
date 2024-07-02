@@ -15,12 +15,14 @@ from ..oauth2 import require_user
 from ..models.firebase_token_schemas import PushTokenSchema
 from .BaseController import BaseController
 from ..service.AuthService import AuthService
+from ..service.TokenService import PushTokenService
 
 
 class AuthController(BaseController):
-    def __init__(self, auth_service: AuthService):
+    def __init__(self, auth_service: AuthService, token_service: PushTokenService):
         super().__init__()  # This initializes the BaseController
         self.auth_service = auth_service
+        self.token_service = token_service
 
     async def register_user(self, payload: CreateUserSchema):
         if await self.auth_service.verify_user_credentials(

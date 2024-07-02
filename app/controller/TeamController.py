@@ -45,8 +45,7 @@ class TeamController(BaseController):
             )
         team_id = created_team["_id"]
         await app.rabbit_client.declare_and_bind_queue(
-            queue_name=f"{team_id}",
-            routing_keys=[f"team.{team_id}.event.*"],
+            queue_name=f"{team_id}", routing_keys=[f"team.{team_id}.event.*"]
         )
         return created_team
 
