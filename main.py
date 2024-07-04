@@ -14,7 +14,6 @@ from app.database import (
     get_collection,
 )
 import os
-from app.controller.BaseController import get_base_controller
 from app.service.TokenService import PushTokenService
 
 

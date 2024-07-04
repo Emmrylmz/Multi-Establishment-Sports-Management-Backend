@@ -10,6 +10,9 @@ class AttendanceRecord(BaseModel):
 
 class AttendanceFormSchema(BaseModel):
     event_id: str
-    event_type: str  # 'game' or 'training'
-    team_id: str
+    event_type: str
     attendances: List[AttendanceRecord]
+
+
+class FetchAttendanceFromEventIdSchema(BaseModel):
+    event_id: str

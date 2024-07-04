@@ -45,7 +45,7 @@ def get_auth_service(
 
 def get_attendance_service(
     attendance_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("Attecndance")
+        lambda: get_collection("Attendance")
     ),
 ) -> EventService:
     return EventService(attendance_collection)

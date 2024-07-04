@@ -6,10 +6,14 @@ from ..models.event_schemas import (
     UpdateEventSchema,
     EventResponseSchema,
 )
-from ..models.attendance_schemas import AttendanceFormSchema
+from ..models.attendance_schemas import (
+    AttendanceFormSchema,
+    FetchAttendanceFromEventIdSchema,
+)
 from ..oauth2 import require_user
 from .BaseRouter import BaseRouter, get_base_router
 from fastapi_jwt_auth import AuthJWT
+from typing import Dict
 
 router = APIRouter()
 
@@ -86,4 +90,14 @@ async def add_attendances_to_event(
 ):
     return await base_router.event_controller.add_attendance(
         attendance_form=attendance_form
+    )
+
+
+@router.post("/fetch_attendances_for_event")
+async def fetch_attendances_for_event(
+    payload: FetchAttendanceFromEventIdSchema,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.fetch_attendances_for_event(
+        payload.event_id
     )

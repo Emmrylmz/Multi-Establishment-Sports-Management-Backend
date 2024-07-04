@@ -43,18 +43,3 @@ class BaseController:
     #     response = dto.ResponseMessage(message=message, success=success, data=data)
     #     return JSONResponse(content=asdict(response))
 
-
-def get_base_controller() -> BaseController:
-    user_service = UserService(get_collection("User_Info"))
-    token_service = PushTokenService(get_collection("Push_Token"))
-    team_service = TeamService()  # This already initializes with the correct collection
-    event_service = EventService(get_collection("Event"))
-    auth_service = AuthService(get_collection("Auth"))
-
-    return BaseController(
-        user_service=user_service,
-        token_service=token_service,
-        team_service=team_service,
-        event_service=event_service,
-        auth_service=auth_service,
-    )

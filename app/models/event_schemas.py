@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from typing import Optional, Literal, List
 from bson.objectid import ObjectId
@@ -20,10 +20,12 @@ pydantic.json.ENCODERS_BY_TYPE[datetime] = str
 class CreateEventSchema(BaseModel):
     event_type: str
     place: str
-    event_date: datetime  # corrected from event_data
+    start_datetime: datetime  # Combined start date and time
+    end_datetime: datetime  # Combined end date and time
     created_at: datetime
     team_id: str
     description: str
+    creator_id: str
 
     class Config:
         orm_mode = True
@@ -44,6 +46,12 @@ class CreateEventSchema(BaseModel):
     @id.setter
     def id(self, _id: str):
         self._id = _id
+
+    @validator("end_datetime")
+    def check_dates(cls, v, values):
+        if "start_datetime" in values and v <= values["start_datetime"]:
+            raise ValueError("end_datetime must be after start_datetime")
+        return v
 
 
 class ListTeamEventSchema(BaseModel):

@@ -46,8 +46,10 @@ class EventService(MongoDBService):
                             "event_id": {"$toString": "$_id"},
                             "event_type": "$event_type",
                             "place": "$place",
-                            "event_date": "$event_date",
+                            "start_datetime": "$start_datetime",
+                            "end_datetime": "$end_datetime",
                             "description": "$description",
+                            "team_id": "$team_id",
                         }
                     },
                 }
@@ -58,15 +60,13 @@ class EventService(MongoDBService):
         results = await self.collection.aggregate(pipeline).to_list(length=None)
         return results
 
-    async def add_attendance(self, event_id, attendances, event_type, team_id):
+    async def add_attendance(self, event_id, attendances):
         attendance_records = []
         for attendance in attendances:
             attendance_record = {
                 "event_id": ObjectId(event_id),
                 "user_id": attendance.user_id,
                 "status": attendance.status,
-                "event_type": event_type,
-                "team_id": team_id,
                 "timestamp": datetime.now(),
             }
             attendance_records.append(attendance_record)
@@ -155,6 +155,12 @@ class EventService(MongoDBService):
                 status_code=500,
                 detail=f"Failed to update attendance ratios: {str(e)}",
             )
+
+    async def get_attendances_by_event_id(self, event_id):
+        attendances = await self.attendance_collection.find(
+            {"event_id": ObjectId(event_id)}
+        ).to_list(length=None)
+        return attendances
 
 
 # async def list_events(self, team_id: dict):

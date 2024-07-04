@@ -120,12 +120,12 @@ class EventController(BaseController):
     async def add_attendance(self, attendance_form: AttendanceFormSchema):
 
         event_id = attendance_form.event_id
-        attendances = attendance_form.attendances
         event_type = attendance_form.event_type
-        team_id = attendance_form.team_id
+        attendances = attendance_form.attendances
         try:
             await self.event_service.add_attendance(
-                event_id, attendances, event_type, team_id
+                event_id,
+                attendances,
             )
             await self.event_service.update_attendance_counts(
                 event_type=event_type, attendances=attendances
@@ -139,3 +139,6 @@ class EventController(BaseController):
             )
 
         return {"message": "Attendance records added successfully"}
+
+    async def fetch_attendances_for_event(self, event_id: str):
+        return await self.event_service.get_attendances_by_event_id(event_id)
