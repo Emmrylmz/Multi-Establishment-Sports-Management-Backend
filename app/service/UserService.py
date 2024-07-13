@@ -1,5 +1,5 @@
 # app/services/user_service.py
-from fastapi import Depends
+from fastapi import Depends, Query
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
@@ -13,12 +13,7 @@ from ..database import get_collection
 
 
 class UserService(MongoDBService):
-    def __init__(
-        self,
-        collection: AsyncIOMotorCollection = Depends(
-            lambda: get_collection("User_Info")
-        ),
-    ):
+    def __init__(self, collection: AsyncIOMotorCollection):
         self.collection = collection
         self.collection = get_collection("User_Info")
         super().__init__(self.collection)
@@ -33,6 +28,17 @@ class UserService(MongoDBService):
         user_infos = await cursor.to_list(length=None)
 
         return user_infos
+
+    async def search_users_by_name(self, query: str):
+        # Create a case-insensitive regex pattern
+        pattern = f".*{query}.*"
+        regex = {"$regex": pattern, "$options": "i"}
+
+        # Search for users whose name matches the query
+        users = await self.collection.find(
+            {"name": regex}, {"_id": 1, "name": 1, "photo": 1}
+        ).to_list(length=None)
+        return users
 
 
 # def get_current_user(token: str = Depends(user_service.get_current_user_token)):

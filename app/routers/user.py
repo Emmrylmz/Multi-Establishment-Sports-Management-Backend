@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Request, status, Query
 from ..oauth2 import require_user
 from ..models.user_schemas import UserAttributesSchema
 from ..controller.UserController import UserController
@@ -27,6 +27,21 @@ async def get_user_information(
     Get user information.
     """
     return await base_router.user_controller.get_user_information(user_id)
+
+
+@router.get("/users/search")
+async def search_users(
+    query: str = Query(None),
+    province: str = Query(None),
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    if not query:
+        # If no query is provided, return users by province
+        users = await base_router.user_controller.get_all_users_by_province(province)
+    else:
+        # Search users based on the query
+        users = await base_router.user_controller.search_users_by_name(query)
+    return users
 
 
 user_router = router

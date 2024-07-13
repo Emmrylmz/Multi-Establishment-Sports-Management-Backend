@@ -34,3 +34,15 @@ class UserController(BaseController):
 
     async def get_user_information(self, user_id: str):
         return await self.user_service.get_by_id(user_id)
+
+    async def get_all_users_by_province(self, province: str = None):
+        return await self.user_service.get_by_province(province)
+
+    async def search_users_by_name(self, query: str):
+        return await self.user_service.search_users_by_name(query)
+
+    async def get_users(self, limit: int = 100):
+        users = (
+            await self.user_service.collection.find().limit(limit).to_list(length=limit)
+        )
+        return users

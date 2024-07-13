@@ -5,10 +5,12 @@ from ..models.event_schemas import (
     ListTeamEventSchema,
     UpdateEventSchema,
     EventResponseSchema,
+    CreatePrivateLessonSchema,
 )
 from ..models.attendance_schemas import (
     AttendanceFormSchema,
     FetchAttendanceFromEventIdSchema,
+    UpdateAttendanceSchema,
 )
 from ..oauth2 import require_user
 from .BaseRouter import BaseRouter, get_base_router
@@ -79,7 +81,7 @@ async def fetch_team_events(
     user_id: str = Depends(require_user),
     base_router: BaseRouter = Depends(get_base_router),
 ):
-    return await base_router.event_controller.get_team_events(team_ids.team_id)
+    return await base_router.event_controller.get_team_events(team_ids.team_ids)
 
 
 @router.post("/add_attendances_to_event")
@@ -100,4 +102,36 @@ async def fetch_attendances_for_event(
 ):
     return await base_router.event_controller.fetch_attendances_for_event(
         payload.event_id
+    )
+
+
+@router.post("/get_upcoming_events")
+async def get_upcoming_events(
+    payload: ListTeamEventSchema,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.get_upcoming_events(payload.team_ids)
+
+
+@router.put("/update_attendances")
+async def update_attendances(
+    payload: UpdateAttendanceSchema,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.update_attendances(
+        attendances=payload.attendances,
+        event_id=payload.event_id,
+        event_type=payload.event_type,
+    )
+
+
+@router.post("/create/private_lesson")
+async def create_private_lesson(
+    payload: CreatePrivateLessonSchema,
+    request: Request,
+    user_id: str = Depends(require_user),
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.create_private_lesson(
+        payload, request, user_id
     )

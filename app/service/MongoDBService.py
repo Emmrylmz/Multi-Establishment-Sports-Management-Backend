@@ -50,5 +50,12 @@ class MongoDBService:
         # This method can be overridden by subclasses to customize the transformation.
         return document
 
+    async def get_by_province(self, province: str = None):
+        query = {}
+        if province:
+            query["Province"] = province
+        cursor = self.collection.find(query, {"_id": 1, "name": 1, "photo": 1})
+        return await cursor.to_list(length=None)
+
 
 # Usage example must also be updated to use async/await patterns.

@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr, validator, constr, Field
 from typing import List, Optional, Literal
 from datetime import datetime
 from bson.objectid import ObjectId as BsonObjectId
+from bson import ObjectId
 
 
 class PydanticObjectId(BsonObjectId):
@@ -23,6 +24,7 @@ class CreateUserSchema(BaseModel):
     name: str
     role: Literal["Coach", "Player", "Manager"] = "Player"
     teams: List[str] = []
+    province: Optional[str]
 
     @validator("email", pre=True, always=True)
     def normalize_email(cls, v):
@@ -43,22 +45,22 @@ class CreateUserSchema(BaseModel):
 
 
 class User(BaseModel):
-    _id: str
+    id: str = Field(..., alias="_id")
     name: str
-    role: Literal["Coach", "Player", "Manager"]
+    role: str
     email: str
-    teams: List[PydanticObjectId] = []
+    teams: List[str]
 
     class Config:
-        orm_mode = True
-        fields = {"id": "_id"}
+        allow_population_by_field_name = True
+        json_encoders = {ObjectId: str}
 
 
 class UserResponseSchema(BaseModel):
     status: str
     access_token: str
     refresh_token: str
-    user: dict
+    user: User
 
     class Config:
         orm_mode = True
@@ -101,6 +103,7 @@ class LoginUserSchema(BaseModel):
 class UserResponse(BaseModel):
     status: str
     user: UserResponseSchema
+
 
 class UserInfoByIdSchema(BaseModel):
     user_id: str

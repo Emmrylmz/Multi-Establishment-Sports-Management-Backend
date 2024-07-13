@@ -13,11 +13,9 @@ from ..service.MongoDBService import MongoDBService
 
 
 class AuthService(MongoDBService):
-    def __init__(
-        self,
-        collection: AsyncIOMotorCollection = Depends(lambda: get_collection("Auth")),
-    ):
+    def __init__(self, collection: AsyncIOMotorCollection):
         self.collection = collection
+        self.deleted_user_collection = get_collection("Deleted_User")
         super().__init__(self.collection)
 
     async def check_user_exists(self, email: str):
@@ -67,6 +65,31 @@ class AuthService(MongoDBService):
 
         # Now check the role
         return user.get("role")
+
+    async def get_users_by_role_and_province(self, role: str, province: str):
+        return self.collection.find({"role": role, "province": province})
+
+    async def update_user_team_ids(self, user_id: str, team_ids: list):
+        await self.collection.update_one(
+            {"_id": ObjectId(user_id)}, {"$set": {"teams": team_ids}}
+        )
+
+    async def delete_user(self, user: dict):
+        # Insert user into the deleted_user_collection
+        response_insert = await self.deleted_user_collection.insert_one(user)
+        user_id = user["_id"]
+
+        # Delete the user from the original collection
+        response_delete = await self.collection.delete_one({"_id": ObjectId(user_id)})
+
+        # Check if the delete operation was successful
+        if response_delete.deleted_count == 0:
+            raise HTTPException(status_code=500, detail="Failed to delete user")
+
+        return {
+            "deleted_count": response_delete.deleted_count,
+            "inserted_id": str(response_insert.inserted_id),
+        }
 
 
 # @staticmethod

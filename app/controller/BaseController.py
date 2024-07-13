@@ -6,6 +6,7 @@ from ..service.TokenService import PushTokenService
 from ..service.TeamService import TeamService
 from ..service.EventService import EventService
 from ..service.UserService import UserService
+from ..service.PaymentService import PaymentService
 from ..oauth2 import require_user
 from ..utils import hash_password, verify_password, ensure_object_id
 from ..dependencies.service_dependencies import (
@@ -14,6 +15,7 @@ from ..dependencies.service_dependencies import (
     get_team_service,
     get_event_service,
     get_user_service,
+    get_payment_service,
 )
 from ..database import get_collection
 
@@ -26,6 +28,7 @@ class BaseController:
         team_service: TeamService = Depends(get_team_service),
         event_service: EventService = Depends(get_event_service),
         auth_service: AuthService = Depends(get_auth_service),
+        payment_service: PaymentService = Depends(get_payment_service),
     ):
         self.user_service = user_service
         self.token_service = token_service
@@ -42,4 +45,3 @@ class BaseController:
     # ) -> JSONResponse:
     #     response = dto.ResponseMessage(message=message, success=success, data=data)
     #     return JSONResponse(content=asdict(response))
-

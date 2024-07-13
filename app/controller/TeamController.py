@@ -37,16 +37,39 @@ class TeamController(BaseController):
         app = request.app
         user = await self.auth_service.validate_role(user_id, "Coach")
         team_data = team_payload.dict()
+
+        # Create the team
         created_team = await self.team_service.create(team_data)
         if not created_team:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Could not create team",
             )
+
         team_id = created_team["_id"]
+
+        # Declare and bind queue
         await app.rabbit_client.declare_and_bind_queue(
             queue_name=f"{team_id}", routing_keys=[f"team.{team_id}.event.*"]
         )
+
+        # Get the province of the created team
+        province = team_data.get("province")
+
+        # Fetch all managers in the same province
+        managers_cursor = await self.auth_service.get_users_by_role_and_province(
+            "Manager", province
+        )
+        managers = await managers_cursor.to_list(length=None)
+
+        # Update each manager's team_ids array
+        for manager in managers:
+            if team_id not in manager.get("teams", []):
+                manager["teams"].append(team_id)
+                await self.auth_service.update_user_team_ids(
+                    manager["_id"], manager["teams"]
+                )
+
         return created_team
 
     async def add_user_to_team(self, team_ids, user_ids):
@@ -68,17 +91,46 @@ class TeamController(BaseController):
 
     async def get_team_users_by_id(self, team_id: str):
         team_id = self.format_handler(team_id)
-        players = await self.team_service.team_users_list(team_id)
+        players, coaches = await self.team_service.team_users_list(team_id)
 
         # Convert player IDs to ObjectId if they are in string format
         player_ids = [self.format_handler(player_id) for player_id in players]
+        coach_ids = [self.format_handler(coach_id) for coach_id in coaches]
 
         # Query all users at once using the $in operator
-        user_infos = await self.user_service.get_users_by_id(player_ids)
+        player_infos = await self.user_service.get_users_by_id(player_ids)
+        coach_infos = await self.user_service.get_users_by_id(coach_ids)
 
-        return user_infos
+        return {"player_infos": player_infos, "coach_infos": coach_infos}
 
     async def get_teams_by_id(self, team_ids: List[str]):
         object_ids = [self.format_handler(team_id) for team_id in team_ids]
         teams = await self.team_service.get_teams_by_id(object_ids)
         return teams
+
+    async def get_team_and_user_info(self, team_id: str):
+        team_id = self.format_handler(team_id)
+
+        # Fetch team information
+        team_info = await self.team_service.get_by_id(team_id)
+        if not team_info:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
+            )
+
+        # Fetch players and coaches IDs
+        players, coaches = await self.team_users_list(team_id)
+
+        # Convert IDs to ObjectId format
+        player_ids = [self.format_handler(player_id) for player_id in players]
+        coach_ids = [self.format_handler(coach_id) for coach_id in coaches]
+
+        # Fetch user information
+        player_infos = await self.user_service.get_users_by_id(player_ids)
+        coach_infos = await self.user_service.get_users_by_id(coach_ids)
+
+        # Append user info to team info
+        team_info["team_players"] = player_infos
+        team_info["team_coaches"] = coach_infos
+
+        return team_info

@@ -6,6 +6,7 @@ from .BaseService import BaseService
 from ..utils import ensure_object_id
 from pymongo.errors import PyMongoError
 from fastapi import HTTPException, status
+from bson import ObjectId
 
 
 class TeamService(MongoDBService):
@@ -73,7 +74,8 @@ class TeamService(MongoDBService):
     async def team_users_list(self, team_id: str):
         team = await self.get_by_id(team_id)
         players = team["team_players"]
-        return players
+        coaches = team["team_coaches"]
+        return players, coaches
 
     async def check_team_exists(self, team_id):
         team_id = ensure_object_id(team_id)
@@ -81,13 +83,32 @@ class TeamService(MongoDBService):
         return bool(team)
 
     async def get_teams_by_id(self, team_ids):
-        pipeline = [
-            {"$match": {"_id": {"$in": team_ids}}},
-            {"$project": {"_id": 1, "team_name": 1}},
-        ]
+        pipeline = [{"$match": {"_id": {"$in": team_ids}}}]
         teams = await self.collection.aggregate(pipeline).to_list(length=None)
         return teams
 
     async def get_all_teams(self):
-        teams = await self.collection.find({}, {"_id": 1})
-        return teams
+        teams_cursor = self.collection.find({}, {"_id": 1})
+        teams = await teams_cursor.to_list(length=None)
+        return [team["_id"] for team in teams]
+
+    async def get_all_teams_by_province(self, province):
+        teams_cursor = self.collection.find({"province": province}, {"_id": 1})
+        teams = await teams_cursor.to_list(length=None)
+        return [team["_id"] for team in teams]
+
+    async def remove_user_from_teams(self, user_id, team_ids):
+        team_object_ids = [ObjectId(team_id) for team_id in team_ids]
+        try:
+            result = await self.collection.update_many(
+                {"_id": {"$in": team_object_ids}}, {"$pull": {"team_players": user_id}}
+            )
+            if result.modified_count == 0:
+                raise HTTPException(
+                    status_code=404,
+                    detail="No matching teams found or user not in teams",
+                )
+
+            return {"modified_count": result.modified_count}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")

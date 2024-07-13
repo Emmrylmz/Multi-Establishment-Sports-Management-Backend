@@ -55,7 +55,7 @@ class CreateEventSchema(BaseModel):
 
 
 class ListTeamEventSchema(BaseModel):
-    team_id: List[str]
+    team_ids: List[str]
 
 
 class UpdateEventSchema(BaseModel):
@@ -80,3 +80,18 @@ class Event(BaseModel):
 class ListEventResponseSchema(BaseModel):
     team_name: str
     events: List[Event]
+
+
+class CreatePrivateLessonSchema(BaseModel):
+    place: str
+    start_datetime: datetime
+    end_datetime: datetime
+    description: str
+    user_id: str
+    lesson_fee: float
+    paid: bool = Field(default=False)
+
+
+class PrivateLessonResponseSchema(BaseModel):
+    lesson_id: str
+    status: str

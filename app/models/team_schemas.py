@@ -21,6 +21,7 @@ class CreateTeamSchema(BaseModel):
     team_name: str = Field(..., example="Warriors")
     team_players: List[str] = Field(..., example=["player1", "player2"])
     team_coaches: List[str] = Field(..., example=["coach1", "coach2"])
+    province: str = Field(..., example="Izmir")
 
     class Config:
         orm_mode = True

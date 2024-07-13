@@ -74,3 +74,12 @@ def logout(
     base_router: BaseRouter = Depends(get_base_router),
 ):
     return base_router.auth_controller.logout(response, Authorize)
+
+
+@router.get("/delete_user/{user_id}", status_code=status.HTTP_200_OK)
+async def delete_user(
+    # Authorize: AuthJWT = Depends(),
+    user_id: str,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.auth_controller.delete_user(user_id=user_id)  # , Authorize

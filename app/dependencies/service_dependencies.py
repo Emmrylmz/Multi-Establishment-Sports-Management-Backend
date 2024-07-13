@@ -7,6 +7,7 @@ from ..service.TeamService import TeamService
 from ..service.EventService import EventService
 from ..service.UserService import UserService
 from ..service.AuthService import AuthService
+from ..service.PaymentService import PaymentService
 
 
 def get_push_token_service(
@@ -49,3 +50,11 @@ def get_attendance_service(
     ),
 ) -> EventService:
     return EventService(attendance_collection)
+
+
+def get_payment_service(
+    payment_collection: AsyncIOMotorCollection = Depends(
+        lambda: get_collection("Payment")
+    ),
+) -> PaymentService:
+    return PaymentService(payment_collection)

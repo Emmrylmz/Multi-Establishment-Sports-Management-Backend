@@ -16,3 +16,9 @@ class AttendanceFormSchema(BaseModel):
 
 class FetchAttendanceFromEventIdSchema(BaseModel):
     event_id: str
+
+
+class UpdateAttendanceSchema(BaseModel):
+    attendances: List[AttendanceRecord]
+    event_id: str
+    event_type: str

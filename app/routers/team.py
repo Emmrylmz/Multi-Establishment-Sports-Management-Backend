@@ -41,14 +41,14 @@ async def insert_user(
 
 @router.post("/get_team_users", status_code=status.HTTP_200_OK)
 async def get_team_users(
-    request: TeamPlayers,
+    payload: TeamPlayers,
     base_router: BaseRouter = Depends(get_base_router),
 ):
     """
     Get users of a team by team ID.
     """
     return await base_router.team_controller.get_team_users_by_id(
-        team_id=request.team_id
+        team_id=payload.team_id
     )
 
 

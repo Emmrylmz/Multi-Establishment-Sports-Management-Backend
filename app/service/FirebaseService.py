@@ -13,10 +13,8 @@ from .BaseService import get_base_service
 class FirebaseService(MongoDBService):
     def __init__(
         self,
+        collection: AsyncIOMotorCollection,
         cred_path: str = settings.FIREBASE_CREDENTIALS_PATH,
-        collection: AsyncIOMotorCollection = Depends(
-            lambda: get_collection("Push_Token")
-        ),
     ):
         self.collection = collection
         super().__init__(self.collection)

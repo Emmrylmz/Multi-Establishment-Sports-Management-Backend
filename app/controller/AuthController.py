@@ -16,13 +16,20 @@ from ..models.firebase_token_schemas import PushTokenSchema
 from .BaseController import BaseController
 from ..service.AuthService import AuthService
 from ..service.TokenService import PushTokenService
+from ..service.TeamService import TeamService
 
 
 class AuthController(BaseController):
-    def __init__(self, auth_service: AuthService, token_service: PushTokenService):
+    def __init__(
+        self,
+        auth_service: AuthService,
+        token_service: PushTokenService,
+        team_service: TeamService,
+    ):
         super().__init__()  # This initializes the BaseController
         self.auth_service = auth_service
         self.token_service = token_service
+        self.team_service = team_service
 
     async def register_user(self, payload: CreateUserSchema):
         if await self.auth_service.verify_user_credentials(
@@ -39,7 +46,17 @@ class AuthController(BaseController):
 
         user_data = payload.dict(exclude_none=False)
         team_ids = payload.teams
-        team_ids = [self.format_handler(team_id) for team_id in team_ids]
+        province = user_data.get("province")
+
+        # If user role is manager, fetch all team ids
+        if user_data.get("role") == "Manager" and province and len(province) > 0:
+            team_ids = await self.team_service.get_all_teams_by_province(
+                province=province
+            )
+        else:
+            team_ids = [str(team_id) for team_id in team_ids]
+
+        user_data["teams"] = team_ids
         user_data["teams"] = team_ids
         for team_id in payload.teams:
             if not await self.team_service.check_team_exists(team_id):
@@ -103,12 +120,15 @@ class AuthController(BaseController):
             expires=settings.REFRESH_TOKEN_EXPIRES_IN * 60,
         )
 
+        # Convert ObjectId to string for teams
+        teams = [str(team_id) for team_id in user.get("teams", [])]
+
         user_model = User(
             id=str(user["_id"]),
             name=user["name"],
             role=user["role"],
             email=user["email"],
-            teams=user["teams"],
+            teams=teams,
         )
         user_response = UserResponseSchema(
             status="success",
@@ -205,3 +225,25 @@ class AuthController(BaseController):
     #         response = await auth_service.create(payload_data)
     #     except e:
     #         print(e)
+
+    async def delete_user(self, user_id: str):
+        try:
+            user_id_obj = self.format_handler(user_id)
+        except Exception as e:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid user ID format: {str(e)}"
+            )
+        try:
+            # Check if the user exists
+            user = await self.auth_service.get_by_id(user_id_obj)
+            if not user:
+                raise HTTPException(status_code=404, detail="User not found")
+            deleted_user = await self.auth_service.delete_user(user)
+            deleted_team = await self.team_service.remove_user_from_teams(
+                user_id_obj, user["teams"]
+            )
+            return {"deleted_user": deleted_user, "deleted_team": deleted_team}
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")

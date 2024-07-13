@@ -5,6 +5,7 @@ from app.routers.auth import router as auth_router
 from app.routers.event import router as event_router
 from app.routers.user import router as user_router
 from app.routers.team import router as team_router
+from app.routers.payment import router as payment_router
 from app.tools.RabbitClient import RabbitClient
 from app.service.FirebaseService import FirebaseService
 from app.database import (
@@ -70,6 +71,7 @@ app.include_router(auth_router, tags=["Auth"], prefix="/api/auth")
 app.include_router(event_router, tags=["events"], prefix="/api/events")
 app.include_router(team_router, tags=["teams"], prefix="/api/teams")
 app.include_router(user_router, tags=["user_info"], prefix="/api/user_info")
+app.include_router(payment_router, tags=["payments"], prefix="/api/payments")
 #     notifications.router, tags=["Notifications"], prefix="/api/notifications"
 # )
 
