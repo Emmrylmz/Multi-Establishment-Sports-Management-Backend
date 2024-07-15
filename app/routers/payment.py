@@ -38,7 +38,7 @@ async def pay_user_payment(
     payment: CreatePaymentForMonthsSchema,
     base_router: BaseRouter = Depends(get_base_router),
 ):
-    success = await base_router.payment_controller.create_payments(payment)
+    success = await base_router.payment_controller.create_payment_for_months(payment)
     if not success:
         raise HTTPException(
             status_code=404, detail="Payment not found or could not be updated"

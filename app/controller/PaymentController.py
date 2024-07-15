@@ -5,7 +5,14 @@ from .BaseController import BaseController
 from ..oauth2 import require_user
 from ..service import PaymentService, AuthService, UserService
 from datetime import datetime
-from ..models.payment_schemas import PaymentType, PrivateLessonResponseSchema
+from ..models.payment_schemas import (
+    PaymentType,
+    PrivateLessonResponseSchema,
+    Payment,
+    Status,
+    CreatePaymentForMonthsSchema,
+)
+from dateutil.relativedelta import relativedelta
 
 
 class PaymentController(BaseController):
@@ -20,36 +27,37 @@ class PaymentController(BaseController):
     async def update_payment(self, user_id: str, month: int, year: int):
         return await self.payment_service.update_payment(user_id, month, year)
 
-    async def create_payments(self, payment: dict):
+    async def create_payment_for_months(self, payment: CreatePaymentForMonthsSchema):
+        user_id = payment.user_id
+        months_and_amounts = payment.months_and_amounts
+        year = payment.year
+        province = payment.province
 
-        payment = payment.dict()
-        months = payment.get("months")
-        year = payment.get("year")
-        user_id = payment.get("user_id")
-        team_id = payment.get("team_id")
-        amount = payment.get("amount")
-        if not months or not year:
-            raise ValueError("Months and year must be provided")
+        if not months_and_amounts or not year:
+            raise ValueError("Months and amounts, and year must be provided")
 
-        payments = []
-        for month in months:
-            payment_data = {
-                "_id": ObjectId(),  # Add this if you want to generate ObjectId for each document
-                "user_id": user_id,
-                "payment_type": PaymentType.MONTHLY,
-                "month": month,
-                "year": year,
-                "paid": True,
-                "amount": amount,
-                "paid_date": datetime.utcnow(),
-            }
-            payments.append(payment_data)
+        current_date = datetime.utcnow()
 
-        inserted_ids = await self.payment_service.create_payments(payments)
+        months_and_amounts = await self.payment_service._handle_unpaid_ticket(
+            user_id, months_and_amounts
+        )
+        paid_payments = self.payment_service._create_paid_payments(
+            user_id, months_and_amounts, year, province, current_date
+        )
+        pending_payment = self.payment_service._create_pending_payment(
+            user_id, months_and_amounts, year, province, current_date
+        )
+
+        all_payments = paid_payments + [pending_payment]
+        inserted_ids = await self.payment_service.create_payments(all_payments)
+
         return {
             "status": "success",
-            "message": "Payments created successfully",
+            "message": f"Created {len(paid_payments)} paid payments and 1 pending payment",
             "inserted_ids": inserted_ids,
+            "unpaid_ticket_paid": bool(
+                await self.payment_service.get_unpaid_ticket(user_id)
+            ),
         }
 
     async def get_monthly_revenue(self, month: int, year: int):

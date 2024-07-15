@@ -10,15 +10,23 @@ class PaymentType(str, Enum):
     PRIVATE_LESSON = "private_lesson"
 
 
+class Status(str, Enum):
+    PENDING = "pending"
+    PAID = "paid"
+    OVERDUE = "overdue"
+
+
 class Payment(BaseModel):
-    id: Optional[str] = Field(None, alias="_id")
     user_id: str
+    payment_type: str
+    due_date: datetime
     amount: float
-    payment_type: PaymentType
-    paid: bool = False
-    paid_date: datetime = None
+    status: Status
+    created_at: datetime
     month: int
     year: int
+    paid_date: Optional[datetime]
+    province: str = Field(..., example="Izmir")
 
     class Config:
         json_encoders = {ObjectId: str}
@@ -51,8 +59,8 @@ class PrivateLessonResponseSchema(BaseModel):
 class CreatePaymentForMonthsSchema(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
     user_id: str
-    amount: float
-    months: List[int]
+    months_and_amounts: dict
     year: int
-    paid: bool = True
+    status: Status
     paid_date: Optional[datetime] = None
+    province: str = Field(..., example="Izmir")

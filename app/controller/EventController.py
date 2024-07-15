@@ -8,14 +8,15 @@ from ..models.event_schemas import (
     ListEventResponseSchema,
     CreatePrivateLessonSchema,
     PrivateLessonResponseSchema,
+    RequestStatus,
 )
-from ..models.payment_schemas import Payment, PaymentType
 from ..models.attendance_schemas import AttendanceFormSchema
 from bson import ObjectId
 from .BaseController import BaseController
 from typing import List, Dict, Any
 from ..service import EventService, AuthService, PaymentService
 import logging
+from datetime import datetime
 
 # from ...main import rabbit_client
 
@@ -162,44 +163,139 @@ class EventController(BaseController):
             event_id, event_type, attendances
         )
 
-    async def create_private_lesson(
+    async def create_private_lesson_request(
         self,
         lesson: CreatePrivateLessonSchema,
         request: Request,
-        user_id: str,
+        # user_id: str,
     ):
         app = request.app
 
-        # Role check - ensuring only "Coach" can create private lessons
-        user = await self.auth_service.validate_role(user_id, role="Coach")
-
-        lesson_data = lesson.dict()
-        lesson_data["coach_id"] = user_id
-        has_paid = lesson_data.get("paid")
-        # Call to your service layer to save the private lesson asynchronously
-        created_lesson = await self.event_service.create_privete_lesson(lesson_data)
-        if not created_lesson:
+        # Create a private lesson request
+        lesson_request_id = await self.event_service.create_private_lesson_request(
+            lesson
+        )
+        if not lesson_request_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not create private lesson",
+                detail="Could not create private lesson request",
             )
 
-        created_payment = await self.payment_service.create_payment_for_private_lesson(
-            created_lesson=created_lesson, has_paid=has_paid
-        )
-        if not created_payment:
-            # If payment creation fails, we might want to delete the lesson or handle this scenario appropriately
-            await self.private_lesson_service.delete(str(created_lesson["_id"]))
+        return {"request_id": str(lesson_request_id), "status": "request_created"}
+
+    async def approve_private_lesson(
+        self,
+        lesson_data: CreatePrivateLessonSchema,
+        lesson_id: str,
+        user_id: str,
+        request: Request,
+    ):
+        try:
+            user = await self.auth_service.validate_role(user_id, role="Coach")
+            app = request.app
+
+            if not lesson_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="lesson_id is required",
+                )
+
+            # Fetch the existing lesson request
+            existing_request = (
+                await self.event_service.private_lesson_collection.find_one(
+                    {"_id": ObjectId(lesson_id)}
+                )
+            )
+
+            if not existing_request:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Private lesson request not found",
+                )
+
+            # Check if the request is still pending
+            if existing_request.get("request_status") != RequestStatus.pending:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Cannot approve a request that is not pending",
+                )
+
+            # Prepare the update data
+            update_data = {
+                "place": lesson_data.place,
+                "start_datetime": lesson_data.start_datetime,
+                "end_datetime": lesson_data.end_datetime,
+                "description": lesson_data.description,
+                "lesson_fee": lesson_data.lesson_fee,
+                "paid": lesson_data.paid,
+                "coach_id": "asd",  # Replace with actual coach ID if necessary
+                "request_status": RequestStatus.approved,
+                "response_date": datetime.utcnow(),
+                "response_notes": lesson_data.response_notes,
+            }
+
+            # Approve the private lesson request
+            updated_count = await self.event_service.approve_private_lesson_request(
+                lesson_id, update_data
+            )
+
+            if not updated_count:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Could not approve private lesson request",
+                )
+
+            # Fetch the updated lesson data
+            created_lesson = (
+                await self.event_service.private_lesson_collection.find_one(
+                    {"_id": ObjectId(lesson_id)}
+                )
+            )
+
+            if not created_lesson:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Could not fetch approved lesson data",
+                )
+
+            created_payment = (
+                await self.payment_service.create_payment_for_private_lesson(
+                    created_lesson=created_lesson,
+                    has_paid=lesson_data.paid,
+                    province=user["province"],
+                )
+            )
+
+            if not created_payment:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Could not create payment for the lesson",
+                )
+
+            # Publishing a message to RabbitMQ asynchronously
+            await app.rabbit_client.publish_message(
+                routing_key="private_lesson.approved",
+                message={"lesson": created_lesson, "action": "approved"},
+            )
+
+            return {
+                "lesson_id": str(created_lesson["_id"]),
+                "status": "lesson_approved",
+            }
+
+        except Exception as e:
+            print(f"Error approving private lesson: {str(e)}")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not create payment for the lesson",
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error approving private lesson: {str(e)}",
             )
 
-        # Publishing a message to RabbitMQ asynchronously
-        await app.rabbit_client.publish_message(
-            routing_key="private_lesson.created",
-            message={"lesson": created_lesson, "action": "created"},
+    async def get_private_lesson_by_coach_id(self, coach_id: str):
+        return await self.event_service.get_private_lesson_by_user_id(
+            id=coach_id, field="coach_id"
         )
-        lesson_id = str(created_lesson["_id"])
 
-        return PrivateLessonResponseSchema(lesson_id=lesson_id, status="created")
+    async def get_private_lesson_by_player_id(self, player_id: str):
+        return await self.event_service.get_private_lesson_by_user_id(
+            id=player_id, field="player_id"
+        )

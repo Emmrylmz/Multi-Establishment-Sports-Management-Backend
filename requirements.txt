@@ -12,3 +12,4 @@ python-dotenv==1.0.0
 fastapi_jwt_auth
 fastapi-jwt-auth[asymmetric]
 email-validator==1.1.3
+python-dateutil

@@ -14,30 +14,70 @@ class PushTokenService(MongoDBService):
         super().__init__(self.collection)
 
     async def save_token(self, payload: PushTokenSchema, user_id: str):
-        data = payload.dict()
-        token = await self.get_by_id(user_id)
-        if token:
-            res = await self.update(user_id, {"token": payload.token})
-            return res
-        data["_id"] = ObjectId(user_id)
-        result = await self.create(data)
-        return result
+        try:
+            data = payload.dict()
+            token = await self.collection.find_one({"_id": ObjectId(user_id)})
+            if token:
+                res = await self.collection.update_one(
+                    {"_id": ObjectId(user_id)}, {"$set": {"token": payload.token}}
+                )
+                return res.modified_count > 0
+            data["_id"] = ObjectId(user_id)
+            result = await self.collection.insert_one(data)
+            return result.inserted_id is not None
+        except Exception as e:
+            logging.error(f"Error saving token: {e}")
+            return False
 
     async def get_team_player_tokens(self, team_id):
         try:
             team = await self.team_collection.find_one({"_id": ObjectId(team_id)})
             if team:
-                players_ids = team["team_players"]
+                players_ids = team.get("team_players", [])
                 object_ids = [ObjectId(id) for id in players_ids]
                 query = {"_id": {"$in": object_ids}}
-                documents = await self.list(query=query)
-                tokens = [player["token"] for player in documents if "token" in player]
+                documents = await self.collection.find(query).to_list(None)
+                tokens = [
+                    player.get("token") for player in documents if player.get("token")
+                ]
                 return tokens
             else:
-                return {"team not found"}
-        except KeyError as e:
-            print(f"Key error: {e} - Check data integrity")
-            return []
+                logging.warning(f"Team not found: {team_id}")
+                return []
         except Exception as e:
-            print(f"An error occurred: {e}")
+            logging.error(f"Error getting team player tokens: {e}")
+            return []
+
+    async def get_user_token(self, user_id):
+        try:
+            token = await self.collection.find_one({"_id": ObjectId(user_id)})
+            if not token:
+                logging.warning(f"No user Push Token found for user: {user_id}")
+                return None
+            return token.get("token")
+        except Exception as e:
+            logging.error(f"Error getting user token: {e}")
+            return None
+
+    async def get_all_user_tokens(self):
+        try:
+            documents = await self.collection.find({}, {"token": 1, "_id": 0}).to_list(
+                None
+            )
+            tokens = [doc.get("token") for doc in documents if doc.get("token")]
+            return tokens
+        except Exception as e:
+            logging.error(f"Error getting all user tokens: {e}")
+            return []
+
+    async def get_province_user_tokens(self, province: str):
+        try:
+            query = {"province": province}
+            documents = await self.collection.find(
+                query, {"token": 1, "_id": 0}
+            ).to_list(None)
+            tokens = [doc.get("token") for doc in documents if doc.get("token")]
+            return tokens
+        except Exception as e:
+            logging.error(f"Error getting province user tokens: {e}")
             return []

@@ -4,17 +4,19 @@ from typing import Optional, Literal, List
 from bson.objectid import ObjectId
 import struct
 import pydantic
+from enum import Enum
 
 
-class BeeObjectId(ObjectId):
-    # fix for FastApi/docs
-    _origin_ = pydantic.typing.Literal
-    _args_ = str
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
 
-
-pydantic.json.ENCODERS_BY_TYPE[ObjectId] = str
-pydantic.json.ENCODERS_BY_TYPE[BeeObjectId] = str
-pydantic.json.ENCODERS_BY_TYPE[datetime] = str
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(v):
+            raise ValueError("Invalid objectid")
+        return ObjectId(v)
 
 
 class CreateEventSchema(BaseModel):
@@ -82,14 +84,36 @@ class ListEventResponseSchema(BaseModel):
     events: List[Event]
 
 
+class RequestStatus(str, Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
 class CreatePrivateLessonSchema(BaseModel):
-    place: str
-    start_datetime: datetime
-    end_datetime: datetime
-    description: str
-    user_id: str
-    lesson_fee: float
-    paid: bool = Field(default=False)
+    # id: Optional[PyObjectId] = Field(alias="_id")
+    place: Optional[str]
+    start_datetime: Optional[datetime]
+    end_datetime: Optional[datetime]
+    description: Optional[str]
+    player_id: Optional[str]
+    lesson_fee: Optional[float]
+    paid: bool = False
+    coach_id: Optional[str]
+
+    # New fields for request ticket
+    request_status: RequestStatus = RequestStatus.pending
+    request_date: datetime = Field(default_factory=datetime.utcnow)
+    preferred_date: Optional[datetime]
+    preferred_time: Optional[str]
+    request_notes: Optional[str]
+    response_date: Optional[datetime]
+    response_notes: Optional[str]
+
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
 
 
 class PrivateLessonResponseSchema(BaseModel):

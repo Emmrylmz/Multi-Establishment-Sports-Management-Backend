@@ -11,7 +11,6 @@ from app.service.FirebaseService import FirebaseService
 from app.database import (
     connect_to_mongo,
     close_mongo_connection,
-    get_initial_data,
     get_collection,
 )
 import os
@@ -30,20 +29,11 @@ class FooApp(FastAPI):
         await connect_to_mongo()
         push_token_service = PushTokenService(collection=get_collection("Push_Token"))
 
-        initial_data = await get_initial_data()
         self.rabbit_client = RabbitClient(
             rabbit_url=self.rabbit_url, push_token_service=push_token_service
         )
         await self.rabbit_client.start()  # Ensure RabbitMQ connection is started
-
-        for team in initial_data:
-            queue_name = f"team_{team['_id']}_queue"
-            routing_keys = [
-                f"team.{team['_id']}.event.*",
-                f"team.{team['_id']}.notifications.*",
-            ]
-            await self.rabbit_client.declare_and_bind_queue(queue_name, routing_keys)
-            await self.rabbit_client.start_consumer(queue_name)
+        await self.rabbit_client.start_consumers()
 
         self.firebase_service = FirebaseService(self.firebase_cred_path)
 
@@ -72,8 +62,6 @@ app.include_router(event_router, tags=["events"], prefix="/api/events")
 app.include_router(team_router, tags=["teams"], prefix="/api/teams")
 app.include_router(user_router, tags=["user_info"], prefix="/api/user_info")
 app.include_router(payment_router, tags=["payments"], prefix="/api/payments")
-#     notifications.router, tags=["Notifications"], prefix="/api/notifications"
-# )
 
 
 # Startup and Shutdown Events

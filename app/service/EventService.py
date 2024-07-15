@@ -6,11 +6,12 @@ from .MongoDBService import MongoDBService
 from ..config import settings
 from ..database import get_collection
 from motor.motor_asyncio import AsyncIOMotorCollection
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, status
 from ..utils import ensure_object_id
 from ..service.BaseService import BaseService, get_base_service
 from typing import List, Dict, Any
 from pymongo import UpdateOne
+from ..models.event_schemas import CreatePrivateLessonSchema, RequestStatus
 
 
 class EventService(MongoDBService):
@@ -152,39 +153,6 @@ class EventService(MongoDBService):
                 status_code=500,
                 detail=f"Failed to update attendance counts and ratios: {str(e)}",
             )
-
-    # async def update_attendance_ratios(self, event_type, user_ids):
-    #     try:
-    #         for user_id in user_ids:
-    #             user = await self.user_collection.find_one({"_id": ObjectId(user_id)})
-    #             if user:
-    #                 if event_type == "game":
-    #                     total_events = user.get("total_game_events", 0)
-    #                     present_events = user.get("present_game_events", 0)
-    #                     ratio_field = "game_attendance_ratio"
-    #                 elif event_type == "training":
-    #                     total_events = user.get("total_training_events", 0)
-    #                     present_events = user.get("present_training_events", 0)
-    #                     ratio_field = "training_attendance_ratio"
-    #                 else:
-    #                     raise ValueError(f"Invalid event type: {event_type}")
-
-    #                 attendance_ratio = (
-    #                     present_events / total_events if total_events > 0 else 0
-    #                 )
-
-    #                 formatted_attendance_ratio = "{:.2f}".format(attendance_ratio)
-
-    #                 await self.user_collection.update_one(
-    #                     {"_id": ObjectId(user_id)},
-    #                     {"$set": {ratio_field: formatted_attendance_ratio}},
-    #                 )
-
-    #     except Exception as e:
-    #         raise HTTPException(
-    #             status_code=500,
-    #             detail=f"Failed to update attendance ratios: {str(e)}",
-    #         )
 
     async def get_attendances_by_event_id(self, event_id):
         attendances = await self.attendance_collection.find(
@@ -344,18 +312,42 @@ class EventService(MongoDBService):
             {"_id": result.inserted_id}
         )
 
+    async def create_private_lesson_request(
+        self, lesson_request: CreatePrivateLessonSchema
+    ):
+        lesson_request_data = lesson_request.dict()
+        lesson_request_data["request_status"] = RequestStatus.pending
+        lesson_request_data["request_date"] = datetime.utcnow()
+        lesson_request_data["response_date"] = None
+        lesson_request_data["response_notes"] = None
 
-# async def list_events(self, team_id: dict):
-#     query = {"team_id": team_id}
-#     events = await event_service.list(query)
-#     return events
+        created_request = await self.private_lesson_collection.insert_one(
+            lesson_request_data
+        )
+        return created_request.inserted_id
 
-# def entity(self, document: dict):
-#     # Customize how event documents are transformed before they are returned
-#     if document:
-#         document["start_date"] = document["start_date"].strftime(
-#             "%Y-%m-%d %H:%M:%S"
-#         )
-#     return super().entity(document)
+    async def approve_private_lesson_request(self, lesson_id: str, update_data: dict):
+        try:
+            # Update the lesson request with the new details
+            updated_request = await self.private_lesson_collection.update_one(
+                {"_id": ObjectId(lesson_id)}, {"$set": update_data}
+            )
 
-# Add event-specific methods if necessary
+            if updated_request.modified_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="No documents were modified. Update failed.",
+                )
+
+            return updated_request.modified_count
+        except Exception as e:
+            print(f"Error in approve_private_lesson_request: {str(e)}")
+            raise e
+
+    async def get_private_lesson_by_user_id(self, id: str, field: str):
+        query = {field: id}
+        print(f"Querying with: {query}")  # Debug log
+        cursor = self.private_lesson_collection.find(query)
+        result = await cursor.to_list(length=None)
+        print(f"Found trainings: {result}")  # Debug log
+        return result

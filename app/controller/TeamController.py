@@ -11,7 +11,7 @@ from fastapi import (
 from ..models.team_schemas import CreateTeamSchema
 from datetime import datetime, timedelta
 from app.config import settings
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Set
 from .BaseController import BaseController
 from ..service import TeamService, AuthService, UserService
 
@@ -49,9 +49,7 @@ class TeamController(BaseController):
         team_id = created_team["_id"]
 
         # Declare and bind queue
-        await app.rabbit_client.declare_and_bind_queue(
-            queue_name=f"{team_id}", routing_keys=[f"team.{team_id}.event.*"]
-        )
+        await app.rabbit_client.create_team_queue(str(team_id))
 
         # Get the province of the created team
         province = team_data.get("province")
@@ -134,3 +132,28 @@ class TeamController(BaseController):
         team_info["team_coaches"] = coach_infos
 
         return team_info
+
+    async def get_team_coaches(self, team_ids: List[str]):
+        try:
+            # Convert team_ids to ObjectId
+            team_object_ids = [self.format_handler(team_id) for team_id in team_ids]
+
+            # Aggregation pipeline to fetch teams and their coaches
+            result = await self.team_service.get_team_coaches(team_object_ids)
+            if not result:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No coaches found for the given teams",
+                )
+
+            coaches = result[0]["team_coaches"]
+            return coaches
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An error occurred while fetching coaches: {str(e)}",
+            )
+
+    async def get_all_coaches(self, province: str):
+        return await self.team_service.get_all_coaches_by_province(province)

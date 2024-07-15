@@ -6,6 +6,21 @@ from fastapi import Depends
 class Database:
     client: AsyncIOMotorClient = None
 
+    async def ensure_indexes(self):
+        try:
+            db = self.client[settings.MONGO_INITDB_DATABASE]
+
+            # Create indexes for the tickets collection
+            await db.Payment.create_index(
+                [("user_id", 1), ("due_date", 1), ("status", 1)], background=True
+            )
+            await db.Payment.create_index(
+                [("payment_type", 1), ("due_date", 1), ("status", 1)], background=True
+            )
+            print("Indexes ensured successfully")
+        except OperationFailure as e:
+            print(f"Error ensuring indexes: {e}")
+
 
 db = Database()
 
@@ -20,20 +35,11 @@ async def connect_to_mongo():
         # Asynchronously get server information
         await db.client.admin.command("ismaster")
         print(f"Connected to MongoDB")
+        await db.ensure_indexes()
     except Exception as e:
         print(f"Unable to connect to the MongoDB server: {e}")
 
     return db
-
-
-async def get_initial_data() -> list:
-    collection = get_collection(
-        "Team"
-    )  # Ensure this matches your actual collection name
-    initial_data = await collection.find({}, {"_id": 1}).to_list(
-        length=None
-    )  # Fetch up to 100 documents, adjust as needed
-    return initial_data
 
 
 async def close_mongo_connection():

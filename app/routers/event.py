@@ -17,6 +17,7 @@ from .BaseRouter import BaseRouter, get_base_router
 from fastapi_jwt_auth import AuthJWT
 from typing import Dict
 
+
 router = APIRouter()
 
 
@@ -126,12 +127,55 @@ async def update_attendances(
 
 
 @router.post("/create/private_lesson")
-async def create_private_lesson(
+async def create_private_lesson_request(
     payload: CreatePrivateLessonSchema,
     request: Request,
+    # user_id: str = Depends(require_user),
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.event_controller.create_private_lesson_request(
+        payload, request
+    )
+
+
+@router.post("/create/private_lesson_response/{lesson_id}")
+async def approve_private_lesson_request(
+    payload: CreatePrivateLessonSchema,
+    request: Request,
+    lesson_id: str,
     user_id: str = Depends(require_user),
     base_router: BaseRouter = Depends(get_base_router),
 ):
-    return await base_router.event_controller.create_private_lesson(
-        payload, request, user_id
+    return await base_router.event_controller.approve_private_lesson(
+        lesson_data=payload, request=request, lesson_id=lesson_id, user_id=user_id
     )
+
+
+@router.get("/coach_private_lessons/{coach_id}")
+async def fetch_coach_private_lessons(
+    coach_id: str,
+    base_router: BaseRouter = Depends(get_base_router),
+    # user_id: str = Depends(require_user),
+):
+    return await base_router.event_controller.get_private_lesson_by_coach_id(coach_id)
+
+
+@router.get("/player_private_lessons/{player_id}")
+async def fetch_coach_private_lessons(
+    player_id: str,
+    base_router: BaseRouter = Depends(get_base_router),
+    # user_id: str = Depends(require_user),
+):
+    return await base_router.event_controller.get_private_lesson_by_player_id(player_id)
+
+
+# @router.post("/create/private_lesson_request", response_model=PrivateLessonRequestOut)
+# async def create_private_lesson_request(
+#     Request: Request,
+#     payload: PrivateLessonRequestCreate,
+#     # current_user: dict = Depends(get_current_user),
+#     base_router: BaseRouter = Depends(get_base_router),
+# ):
+#     return await base_router.event_controller.create_private_lesson_request(
+#         Request, payload
+#     )

@@ -7,6 +7,7 @@ from ..utils import ensure_object_id
 from pymongo.errors import PyMongoError
 from fastapi import HTTPException, status
 from bson import ObjectId
+from typing import List
 
 
 class TeamService(MongoDBService):
@@ -112,3 +113,42 @@ class TeamService(MongoDBService):
             return {"modified_count": result.modified_count}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+    async def get_team_coaches(self, team_ids: List[str]):
+        pipeline = [
+            {"$match": {"_id": {"$in": team_ids}}},
+            {"$unwind": "$team_coaches"},
+            {"$group": {"_id": None, "coach_ids": {"$addToSet": "$team_coaches"}}},
+            {
+                "$lookup": {
+                    "from": "Auth",
+                    # this will come from User_Info
+                    "localField": "coach_ids",
+                    "foreignField": "_id",
+                    "as": "coach_details",
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "team_coaches": {
+                        "$map": {
+                            "input": "$coach_details",
+                            "as": "coach",
+                            "in": {"_id": "$$coach._id", "name": "$$coach.name"},
+                        }
+                    },
+                }
+            },
+        ]
+
+        result = await self.collection.aggregate(pipeline).to_list(length=None)
+
+        return result
+
+    async def get_all_coaches_by_province(self, province: str):
+        cursor = self.auth_collection.find(
+            {"role": "Coach", "province": province}, projection={"_id": 1, "name": 1}
+        )
+        result = await cursor.to_list(length=None)
+        return result

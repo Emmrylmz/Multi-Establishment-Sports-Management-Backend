@@ -4,9 +4,11 @@ from ..models.team_schemas import (
     UserInsert,
     TeamPlayers,
     TeamQueryById,
+    TeamCoachesQuery,
 )
 from ..oauth2 import require_user
 from .BaseRouter import BaseRouter, get_base_router
+from typing import List
 
 router = APIRouter()
 
@@ -61,3 +63,19 @@ async def get_team_by_id(
     Get team details by team IDs.
     """
     return await base_router.team_controller.get_teams_by_id(team_ids=request.team_ids)
+
+
+@router.post("/get_team_coaches", status_code=status.HTTP_200_OK)
+async def get_team_coaches(
+    payload: TeamCoachesQuery,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.team_controller.get_team_coaches(team_ids=payload.team_ids)
+
+
+@router.get("/get_all_coaches_by_province/{province}", status_code=status.HTTP_200_OK)
+async def get_all_coaches(
+    base_router: BaseRouter = Depends(get_base_router),
+    province: str = None,
+):
+    return await base_router.team_controller.get_all_coaches(province=province)

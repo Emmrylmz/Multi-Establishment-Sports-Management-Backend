@@ -51,3 +51,7 @@ class TeamPlayers(BaseModel):
 
 class TeamQueryById(BaseModel):
     team_ids: List[str]
+
+
+class TeamCoachesQuery(BaseModel):
+    team_ids: List[str]

@@ -10,6 +10,7 @@ from pymongo.collection import Collection
 from motor.motor_asyncio import AsyncIOMotorCollection
 from ..service.MongoDBService import MongoDBService
 from ..database import get_collection
+from typing import List
 
 
 class UserService(MongoDBService):
