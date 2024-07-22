@@ -6,7 +6,6 @@ from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from .BaseService import get_base_service, BaseService
 from ..database import get_collection
 from pymongo.collection import Collection
 from motor.motor_asyncio import AsyncIOMotorCollection
@@ -16,25 +15,126 @@ from ..models.payment_schemas import (
     PaymentType,
     Status,
     CreatePaymentForMonthsSchema,
+    PaymentWith,
 )
 from dateutil.relativedelta import relativedelta
+from pymongo import UpdateOne, InsertOne
 
 
 class PaymentService(MongoDBService):
     def __init__(self, collection: AsyncIOMotorCollection):
         self.collection = collection
 
-    async def get_user_payments(self, user_id: str):
-        payments_cursor = self.collection.find({"user_id": user_id})
-        payments = await payments_cursor.to_list(length=None)  # Convert cursor to list
-        return payments
+    async def create_payment_for_months(self, payment: CreatePaymentForMonthsSchema):
+        user_id = payment.user_id
+        months_and_amounts = payment.months_and_amounts
+        year = payment.year
+        province = payment.province
+        payment_with = payment.payment_with
+        status = payment.status
+        paid_date = payment.paid_date
+        default_amount = payment.default_amount
 
-    async def update_payment(self, user_id: str, month: int, year: int):
-        result = await self.collection.update_one(
-            {"user_id": user_id, "month": month, "year": year},
-            {"$set": {"paid": True, "paid_date": datetime.utcnow()}},
-        )
-        return result.modified_count > 0
+        if not months_and_amounts or not year:
+            raise ValueError("Months and amounts, and year must be provided")
+
+        current_date = datetime.utcnow()
+        sorted_months = sorted(int(month) for month in months_and_amounts.keys())
+
+        bulk_operations = []
+        total_overpayment = 0
+
+        for month in sorted_months:
+            amount = months_and_amounts[str(month)]
+            due_date = datetime(
+                year, month + 1, 1
+            )  # Adding 1 to month for correct date
+
+            # Calculate overpayment for this month
+            overpayment = max(0, amount - default_amount)
+            total_overpayment += overpayment
+
+            bulk_operations.append(
+                UpdateOne(
+                    {
+                        "user_id": user_id,
+                        "year": year,
+                        "month": month,
+                        "payment_type": PaymentType.MONTHLY,
+                    },
+                    {
+                        "$set": {
+                            "status": status,
+                            "amount": amount,
+                            "paid_date": paid_date if status == Status.PAID else None,
+                            "payment_with": payment_with,
+                            "due_date": due_date,
+                            "province": province,
+                            "overpayment": overpayment,
+                        },
+                        "$setOnInsert": {
+                            "created_at": current_date,
+                        },
+                    },
+                    upsert=True,
+                )
+            )
+
+        # Handle next month's ticket only if the current payments are PAID
+        if status == Status.PAID:
+            next_month = (max(sorted_months) + 1) % 12
+            next_year = year + (1 if next_month == 0 else 0)
+            next_due_date = datetime(next_year, next_month + 1, 1)
+
+            # Calculate the amount for the next pending ticket
+            next_month_amount = max(0, default_amount - total_overpayment)
+
+            bulk_operations.append(
+                UpdateOne(
+                    {
+                        "user_id": user_id,
+                        "year": next_year,
+                        "month": next_month,
+                        "payment_type": PaymentType.MONTHLY,
+                    },
+                    {
+                        "$setOnInsert": {
+                            "status": Status.PENDING,
+                            "payment_with": payment_with,
+                            "due_date": next_due_date,
+                            "amount": next_month_amount,
+                            "created_at": current_date,
+                            "province": province,
+                            "overpayment_applied": total_overpayment,
+                        }
+                    },
+                    upsert=True,
+                )
+            )
+
+        try:
+            result = await self.collection.bulk_write(bulk_operations)
+        except BulkWriteError as bwe:
+            print(bwe.details)
+            raise HTTPException(status_code=400, detail="Error processing payments")
+
+        return {
+            "status": "success",
+            "message": f"Processed payments for {len(sorted_months)} months and handled next month's ticket",
+            "processed_months": sorted_months,
+            "next_month_ticket": (
+                {
+                    "month": next_month,
+                    "year": next_year,
+                    "amount": next_month_amount,
+                    "overpayment_applied": total_overpayment,
+                }
+                if status == Status.PAID
+                else None
+            ),
+            "modified_count": result.modified_count,
+            "upserted_count": result.upserted_count,
+        }
 
     async def get_monthly_revenue(self, month: int, year: int):
         pipeline = [
@@ -117,14 +217,16 @@ class PaymentService(MongoDBService):
     ):
         now = datetime.utcnow()
         payment_data = Payment(
-            player_id=created_lesson["user_id"],
+            user_id=created_lesson["player_id"],
             amount=created_lesson["lesson_fee"],
             payment_type=PaymentType.PRIVATE_LESSON,
-            paid=has_paid,
+            status=Status.PAID if has_paid else Status.PENDING,
             month=now.month,
             year=now.year,
             paid_date=datetime.utcnow() if has_paid else None,
             province=province,
+            created_at=datetime.utcnow(),
+            due_date=now + relativedelta(months=1),
         )
         created_payment = await self.create(payment_data.dict(exclude_unset=True))
 
@@ -259,3 +361,116 @@ class PaymentService(MongoDBService):
             created_at=current_date,
             province=province,
         )
+
+    async def get_user_payments(self, user_id: str):
+        payments = self.collection.find({"user_id": user_id})
+        list = await payments.to_list(length=None)
+        return list
+
+        # async def update_payment(self, payment_id: str, update_data: dict):
+        #     # Ensure the payment exists
+        #     payment = await self.collection.find_one({"_id": ObjectId(payment_id)})
+        #     if not payment:
+        #         raise HTTPException(status_code=404, detail="Payment not found")
+
+        #     # Prepare update data
+        #     update_fields = {}
+        #     allowed_fields = ["amount", "due_date", "status", "province"]
+        #     for field in allowed_fields:
+        #         if field in update_data:
+        #             update_fields[field] = update_data[field]
+
+        #     if not update_fields:
+        #         raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        #     # Perform the update
+        #     result = await self.collection.find_one_and_update(
+        #         {"_id": ObjectId(payment_id)}, {"$set": update_fields}, return_document=True
+        #     )
+
+        #     if not result:
+        #         raise HTTPException(status_code=400, detail="Update failed")
+
+        #     # Handle the next month's ticket if status changed to or from 'paid'
+        #     if "status" in update_fields:
+        #         await self._handle_payment_status_change(payment, result)
+
+        return result
+
+    async def delete_payment(self, payment_id: str):
+        # Ensure the payment exists
+        payment = await self.collection.find_one({"_id": ObjectId(payment_id)})
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
+
+        # Perform the deletion
+        result = await self.collection.delete_one({"_id": ObjectId(payment_id)})
+
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=400, detail="Deletion failed")
+
+        # Handle the next month's ticket
+        await self._handle_next_month_ticket(payment, is_deletion=True)
+
+        return {"status": "success", "message": "Payment deleted successfully"}
+
+    async def _handle_payment_status_change(self, old_payment: dict, new_payment: dict):
+        if (
+            old_payment["status"] != Status.PAID
+            and new_payment["status"] == Status.PAID
+        ):
+            # Payment changed from not paid to paid
+            await self._handle_next_month_ticket(new_payment, create_next=True)
+        elif (
+            old_payment["status"] == Status.PAID
+            and new_payment["status"] != Status.PAID
+        ):
+            # Payment changed from paid to not paid
+            await self._handle_next_month_ticket(new_payment, delete_next=True)
+
+    async def _handle_next_month_ticket(
+        self, payment: dict, create_next: bool = False, delete_next: bool = False
+    ):
+        next_month = (payment["month"] + 1) % 12
+        next_year = payment["year"] + (1 if next_month == 0 else 0)
+
+        # Find the ticket for the next month
+        next_ticket = await self.collection.find_one(
+            {
+                "user_id": payment["user_id"],
+                "month": next_month,
+                "year": next_year,
+                "payment_type": PaymentType.MONTHLY,
+            }
+        )
+
+        if delete_next and next_ticket:
+            # Delete the next month's ticket if it exists and delete_next is True
+            await self.collection.delete_one({"_id": next_ticket["_id"]})
+        elif create_next:
+            if next_ticket:
+                # Update the existing next month's ticket
+                update_data = {
+                    "amount": payment["amount"],
+                    "province": payment["province"],
+                    "status": Status.PENDING,
+                }
+                await self.collection.update_one(
+                    {"_id": next_ticket["_id"]}, {"$set": update_data}
+                )
+            else:
+                # Create a new ticket for the next month
+                new_ticket = Payment(
+                    user_id=payment["user_id"],
+                    payment_type=PaymentType.MONTHLY,
+                    due_date=datetime(
+                        next_year, next_month + 1, 1
+                    ),  # First day of next month
+                    amount=payment["amount"],
+                    status=Status.PENDING,
+                    month=next_month,
+                    year=next_year,
+                    created_at=datetime.utcnow(),
+                    province=payment["province"],
+                )
+                await self.collection.insert_one(new_ticket.dict())

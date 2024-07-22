@@ -2,7 +2,6 @@ from motor.motor_asyncio import AsyncIOMotorCollection
 from fastapi import Depends
 from ..database import get_collection
 from .MongoDBService import MongoDBService
-from .BaseService import BaseService
 from ..utils import ensure_object_id
 from pymongo.errors import PyMongoError
 from fastapi import HTTPException, status

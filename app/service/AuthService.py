@@ -5,7 +5,6 @@ from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from .BaseService import get_base_service, BaseService
 from ..database import get_collection
 from pymongo.collection import Collection
 from motor.motor_asyncio import AsyncIOMotorCollection

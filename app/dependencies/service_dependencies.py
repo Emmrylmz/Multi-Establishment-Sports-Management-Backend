@@ -8,6 +8,7 @@ from ..service.EventService import EventService
 from ..service.UserService import UserService
 from ..service.AuthService import AuthService
 from ..service.PaymentService import PaymentService
+from ..service.ConstantsService import ConstantsService
 
 
 def get_push_token_service(
@@ -58,3 +59,11 @@ def get_payment_service(
     ),
 ) -> PaymentService:
     return PaymentService(payment_collection)
+
+
+def get_constants_service(
+    constant_collection: AsyncIOMotorCollection = Depends(
+        lambda: get_collection("Constant")
+    ),
+) -> ConstantsService:
+    return ConstantsService(constant_collection)

@@ -9,6 +9,7 @@ from ..models.payment_schemas import (
     RevenueByMonthRangePayloadSchema,
     PrivateLessonResponseSchema,
     CreatePaymentForMonthsSchema,
+    PaymentUpdateSchema,
 )
 from .BaseRouter import BaseRouter, get_base_router
 from typing import List
@@ -87,3 +88,20 @@ async def pay_private_lesson(
         lesson_id,
         request,
     )
+
+
+@router.put("/update/{payment_id}")
+async def update_payment(
+    payment_id: str,
+    update_data: PaymentUpdateSchema,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.payment_controller.update_payment(payment_id, update_data)
+
+
+@router.delete("/delete/{payment_id}")
+async def delete_payment(
+    payment_id: str,
+    base_router: BaseRouter = Depends(get_base_router),
+):
+    return await base_router.payment_controller.delete_payment(payment_id)

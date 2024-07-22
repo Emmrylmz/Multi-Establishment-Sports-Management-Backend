@@ -5,7 +5,6 @@ from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from .BaseService import BaseService
 from pymongo.collection import Collection
 from motor.motor_asyncio import AsyncIOMotorCollection
 from ..service.MongoDBService import MongoDBService
@@ -22,13 +21,21 @@ class UserService(MongoDBService):
     async def get_users_by_id(self, player_ids):
         # Query all users at once using the $in operator
         cursor = self.collection.find(
-            {"_id": {"$in": player_ids}}, {"name": 1, "photo": 1, "_id": 1}
+            {"_id": {"$in": player_ids}},
+            {"name": 1, "photo": 1, "_id": 1, "discount": 1},
         )
 
         # Convert cursor to list
         user_infos = await cursor.to_list(length=None)
 
         return user_infos
+
+    # async def get_discount_by_user_id(self, user_id):
+    #     user_discount = await self.collection.find_one(
+    #         {"_id": ObjectId(user_id)}, {"discount": 1, "_id": 0}
+    #     )
+
+    #     return user_discount.get("dues", 0)
 
     async def search_users_by_name(self, query: str):
         # Create a case-insensitive regex pattern

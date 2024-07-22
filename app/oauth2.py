@@ -12,7 +12,7 @@ class AuthSettings(BaseSettings):
     authjwt_token_location: set = {"cookies", "headers"}
     authjwt_access_cookie_key: str = "access_token"
     authjwt_refresh_cookie_key: str = "refresh_token"
-    authjwt_cookie_csrf_protect: bool = False
+    # authjwt_cookie_csrf_protect: bool = False
     authjwt_private_key: str = settings.JWT_PRIVATE_KEY
     authjwt_public_key: str = settings.JWT_PUBLIC_KEY
     # authjwt_private_key: str = base64.b64decode(settings.JWT_PRIVATE_KEY).decode(

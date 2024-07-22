@@ -8,6 +8,16 @@ from enum import Enum
 class PaymentType(str, Enum):
     MONTHLY = "monthly"
     PRIVATE_LESSON = "private_lesson"
+    STORE_PURCHASE = "store_purchase"
+    OTHER = "other"
+
+
+class PaymentWith(str, Enum):
+    CREDIT_CARD = "credit_card"
+    CASH = "cash"
+    BANK_TRANSFER = "bank_transfer"
+    MOBILE_PAYMENT = "mobile_payment"
+    OTHER = "other"
 
 
 class Status(str, Enum):
@@ -18,7 +28,8 @@ class Status(str, Enum):
 
 class Payment(BaseModel):
     user_id: str
-    payment_type: str
+    payment_type: PaymentType
+    payment_with: PaymentWith
     due_date: datetime
     amount: float
     status: Status
@@ -27,6 +38,7 @@ class Payment(BaseModel):
     year: int
     paid_date: Optional[datetime]
     province: str = Field(..., example="Izmir")
+    description: Optional[str]
 
     class Config:
         json_encoders = {ObjectId: str}
@@ -60,7 +72,16 @@ class CreatePaymentForMonthsSchema(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
     user_id: str
     months_and_amounts: dict
+    default_amount: float
+    payment_with: PaymentWith
     year: int
     status: Status
     paid_date: Optional[datetime] = None
     province: str = Field(..., example="Izmir")
+
+
+class PaymentUpdateSchema(BaseModel):
+    amount: Optional[float]
+    due_date: Optional[datetime]
+    status: Optional[Status]
+    province: Optional[str]

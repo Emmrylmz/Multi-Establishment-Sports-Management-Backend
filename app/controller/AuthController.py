@@ -129,6 +129,7 @@ class AuthController(BaseController):
             role=user["role"],
             email=user["email"],
             teams=teams,
+            province=user["province"],
         )
         user_response = UserResponseSchema(
             status="success",

@@ -17,6 +17,7 @@ from typing import List, Dict, Any
 from ..service import EventService, AuthService, PaymentService
 import logging
 from datetime import datetime
+from fastapi.responses import JSONResponse
 
 # from ...main import rabbit_client
 
@@ -207,6 +208,8 @@ class EventController(BaseController):
                 )
             )
 
+            print(f"Existing request: {existing_request}")  # Debug print
+
             if not existing_request:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -283,11 +286,26 @@ class EventController(BaseController):
                 "status": "lesson_approved",
             }
 
+        except HTTPException as http_exc:
+            print(
+                f"HTTPException caught: status_code={http_exc.status_code}, detail={http_exc.detail}"
+            )
+            return JSONResponse(
+                status_code=http_exc.status_code, content={"detail": http_exc.detail}
+            )
         except Exception as e:
-            print(f"Error approving private lesson: {str(e)}")
-            raise HTTPException(
+            print(f"Unexpected error approving private lesson: {str(e)}")
+            print("Type of exception:", type(e))
+            print("Exception args:", e.args)
+            import traceback
+
+            traceback.print_exc()
+
+            return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error approving private lesson: {str(e)}",
+                content={
+                    "detail": f"Unexpected error approving private lesson: {str(e)}"
+                },
             )
 
     async def get_private_lesson_by_coach_id(self, coach_id: str):

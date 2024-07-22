@@ -8,7 +8,6 @@ from ..database import get_collection
 from motor.motor_asyncio import AsyncIOMotorCollection
 from fastapi import Depends, HTTPException, status
 from ..utils import ensure_object_id
-from ..service.BaseService import BaseService, get_base_service
 from typing import List, Dict, Any
 from pymongo import UpdateOne
 from ..models.event_schemas import CreatePrivateLessonSchema, RequestStatus

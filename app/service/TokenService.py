@@ -3,7 +3,6 @@ from fastapi import Depends
 from motor.motor_asyncio import AsyncIOMotorCollection
 from ..models.firebase_token_schemas import PushTokenSchema
 from .MongoDBService import MongoDBService
-from .BaseService import BaseService
 from ..database import get_collection
 
 

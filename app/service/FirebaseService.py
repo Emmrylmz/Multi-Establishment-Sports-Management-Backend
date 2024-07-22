@@ -1,13 +1,11 @@
 import firebase_admin
 from firebase_admin import credentials, exceptions
 from ..database import get_collection
-from .BaseService import BaseService
 import os
 from motor.motor_asyncio import AsyncIOMotorCollection
 from fastapi import Depends
 from ..service.MongoDBService import MongoDBService
 from ..config import settings
-from .BaseService import get_base_service
 
 
 class FirebaseService(MongoDBService):

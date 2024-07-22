@@ -50,6 +50,7 @@ class User(BaseModel):
     role: str
     email: str
     teams: List[str]
+    province: str
 
     class Config:
         allow_population_by_field_name = True
@@ -87,8 +88,10 @@ class UserAttributesSchema(BaseModel):
     photo: str = None
     contact_info: List[ContactInfo] = None
     family_contacts: Optional[List[ContactPerson]] = []
-    on_boarding = bool = True
+    # on_boarding = bool = True
     created_at: Optional[datetime] = None
+    discount: Optional[float] = None
+    discount_reason: Optional[str] = None
 
     class Config:
         orm_mode = True

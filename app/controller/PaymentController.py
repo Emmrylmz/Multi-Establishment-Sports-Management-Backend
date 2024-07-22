@@ -11,14 +11,16 @@ from ..models.payment_schemas import (
     Payment,
     Status,
     CreatePaymentForMonthsSchema,
+    PaymentUpdateSchema,
 )
 from dateutil.relativedelta import relativedelta
 
 
 class PaymentController(BaseController):
-    def __init__(self, payment_service: PaymentService):
+    def __init__(self, payment_service: PaymentService, user_service: UserService):
         super().__init__()  # Initialize the BaseController
         self.payment_service = payment_service
+        self.user_service = user_service
 
     async def get_user_payments(self, user_id: str):
         payments = await self.payment_service.get_user_payments(user_id)
@@ -28,37 +30,7 @@ class PaymentController(BaseController):
         return await self.payment_service.update_payment(user_id, month, year)
 
     async def create_payment_for_months(self, payment: CreatePaymentForMonthsSchema):
-        user_id = payment.user_id
-        months_and_amounts = payment.months_and_amounts
-        year = payment.year
-        province = payment.province
-
-        if not months_and_amounts or not year:
-            raise ValueError("Months and amounts, and year must be provided")
-
-        current_date = datetime.utcnow()
-
-        months_and_amounts = await self.payment_service._handle_unpaid_ticket(
-            user_id, months_and_amounts
-        )
-        paid_payments = self.payment_service._create_paid_payments(
-            user_id, months_and_amounts, year, province, current_date
-        )
-        pending_payment = self.payment_service._create_pending_payment(
-            user_id, months_and_amounts, year, province, current_date
-        )
-
-        all_payments = paid_payments + [pending_payment]
-        inserted_ids = await self.payment_service.create_payments(all_payments)
-
-        return {
-            "status": "success",
-            "message": f"Created {len(paid_payments)} paid payments and 1 pending payment",
-            "inserted_ids": inserted_ids,
-            "unpaid_ticket_paid": bool(
-                await self.payment_service.get_unpaid_ticket(user_id)
-            ),
-        }
+        return await self.payment_service.create_payment_for_months(payment)
 
     async def get_monthly_revenue(self, month: int, year: int):
         return await self.payment_service.get_monthly_revenue(month, year)
@@ -111,3 +83,27 @@ class PaymentController(BaseController):
         )
 
         return PrivateLessonResponseSchema(lesson_id=lesson_id, status="paid")
+
+    async def update_payment(self, payment_id: str, update_data: PaymentUpdateSchema):
+        try:
+            updated_payment = await self.payment_service.update_payment(
+                payment_id, update_data.dict(exclude_unset=True)
+            )
+            return {
+                "status": "success",
+                "message": "Payment updated successfully",
+                "payment": updated_payment,
+            }
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def delete_payment(self, payment_id: str):
+        try:
+            result = await self.payment_service.delete_payment(payment_id)
+            return result
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
