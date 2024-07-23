@@ -27,13 +27,14 @@ class Status(str, Enum):
 
 
 class Payment(BaseModel):
+    _id: Optional[str] = Field(None, alias="id")
     user_id: str
     payment_type: PaymentType
     payment_with: PaymentWith
     due_date: datetime
     amount: float
     status: Status
-    created_at: datetime
+    created_at: datetime = Field(default_factory=datetime.now)
     month: int
     year: int
     paid_date: Optional[datetime]

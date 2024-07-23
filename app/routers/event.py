@@ -138,7 +138,7 @@ async def create_private_lesson_request(
     )
 
 
-@router.post("/create/private_lesson_response/{lesson_id}")
+@router.post("/approve/private_lesson_response/{lesson_id}")
 async def approve_private_lesson_request(
     payload: CreatePrivateLessonSchema,
     request: Request,

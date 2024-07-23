@@ -105,3 +105,17 @@ async def delete_payment(
     base_router: BaseRouter = Depends(get_base_router),
 ):
     return await base_router.payment_controller.delete_payment(payment_id)
+
+
+@router.get("/{user_id}/{year}")
+async def get_user_data_by_year(
+    user_id: str, year: int, base_router: BaseRouter = Depends(get_base_router)
+):
+    return await base_router.payment_controller.get_user_data_by_year(user_id, year)
+
+
+@router.post("/make_single_payment")
+async def make_single_payment(
+    payment: Payment, base_router: BaseRouter = Depends(get_base_router)
+):
+    return await base_router.payment_controller.make_single_payment(payment)

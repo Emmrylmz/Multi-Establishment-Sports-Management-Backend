@@ -107,3 +107,23 @@ class PaymentController(BaseController):
             raise e
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+    async def get_user_data_by_year(self, user_id: str, year: int):
+        try:
+            result = await self.payment_service.get_user_data_by_year(user_id, year)
+            if result:
+                return result
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    async def make_single_payment(self, payment: Payment):
+        try:
+            result = await self.payment_service.make_single_payment(payment)
+            if result:
+                return result
+        except HTTPException as e:
+            raise e
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))

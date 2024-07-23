@@ -231,7 +231,7 @@ class EventController(BaseController):
                 "description": lesson_data.description,
                 "lesson_fee": lesson_data.lesson_fee,
                 "paid": lesson_data.paid,
-                "coach_id": "asd",  # Replace with actual coach ID if necessary
+                "coach_id": user["_id"],  # Replace with actual coach ID if necessary
                 "request_status": RequestStatus.approved,
                 "response_date": datetime.utcnow(),
                 "response_notes": lesson_data.response_notes,

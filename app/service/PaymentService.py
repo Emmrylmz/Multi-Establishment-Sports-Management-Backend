@@ -19,6 +19,7 @@ from ..models.payment_schemas import (
 )
 from dateutil.relativedelta import relativedelta
 from pymongo import UpdateOne, InsertOne
+from enum import Enum
 
 
 class PaymentService(MongoDBService):
@@ -42,17 +43,12 @@ class PaymentService(MongoDBService):
         sorted_months = sorted(int(month) for month in months_and_amounts.keys())
 
         bulk_operations = []
-        total_overpayment = 0
 
         for month in sorted_months:
             amount = months_and_amounts[str(month)]
             due_date = datetime(
                 year, month + 1, 1
             )  # Adding 1 to month for correct date
-
-            # Calculate overpayment for this month
-            overpayment = max(0, amount - default_amount)
-            total_overpayment += overpayment
 
             bulk_operations.append(
                 UpdateOne(
@@ -70,7 +66,6 @@ class PaymentService(MongoDBService):
                             "payment_with": payment_with,
                             "due_date": due_date,
                             "province": province,
-                            "overpayment": overpayment,
                         },
                         "$setOnInsert": {
                             "created_at": current_date,
@@ -86,9 +81,6 @@ class PaymentService(MongoDBService):
             next_year = year + (1 if next_month == 0 else 0)
             next_due_date = datetime(next_year, next_month + 1, 1)
 
-            # Calculate the amount for the next pending ticket
-            next_month_amount = max(0, default_amount - total_overpayment)
-
             bulk_operations.append(
                 UpdateOne(
                     {
@@ -102,10 +94,9 @@ class PaymentService(MongoDBService):
                             "status": Status.PENDING,
                             "payment_with": payment_with,
                             "due_date": next_due_date,
-                            "amount": next_month_amount,
+                            "amount": default_amount,
                             "created_at": current_date,
                             "province": province,
-                            "overpayment_applied": total_overpayment,
                         }
                     },
                     upsert=True,
@@ -126,8 +117,7 @@ class PaymentService(MongoDBService):
                 {
                     "month": next_month,
                     "year": next_year,
-                    "amount": next_month_amount,
-                    "overpayment_applied": total_overpayment,
+                    "amount": default_amount,
                 }
                 if status == Status.PAID
                 else None
@@ -226,6 +216,7 @@ class PaymentService(MongoDBService):
             paid_date=datetime.utcnow() if has_paid else None,
             province=province,
             created_at=datetime.utcnow(),
+            payment_with=PaymentWith.OTHER,
             due_date=now + relativedelta(months=1),
         )
         created_payment = await self.create(payment_data.dict(exclude_unset=True))
@@ -367,33 +358,35 @@ class PaymentService(MongoDBService):
         list = await payments.to_list(length=None)
         return list
 
-        # async def update_payment(self, payment_id: str, update_data: dict):
-        #     # Ensure the payment exists
-        #     payment = await self.collection.find_one({"_id": ObjectId(payment_id)})
-        #     if not payment:
-        #         raise HTTPException(status_code=404, detail="Payment not found")
+    async def update_payment(self, payment_id: str, update_data: dict):
+        # Ensure the payment exists
+        payment = await self.collection.find_one({"_id": ObjectId(payment_id)})
+        if not payment:
+            raise HTTPException(status_code=404, detail="Payment not found")
 
-        #     # Prepare update data
-        #     update_fields = {}
-        #     allowed_fields = ["amount", "due_date", "status", "province"]
-        #     for field in allowed_fields:
-        #         if field in update_data:
-        #             update_fields[field] = update_data[field]
+        # Prepare update data
+        update_fields = {}
+        allowed_fields = ["amount", "due_date", "status", "province"]
+        for field in allowed_fields:
+            if field in update_data:
+                update_fields[field] = update_data[field]
 
-        #     if not update_fields:
-        #         raise HTTPException(status_code=400, detail="No valid fields to update")
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
 
-        #     # Perform the update
-        #     result = await self.collection.find_one_and_update(
-        #         {"_id": ObjectId(payment_id)}, {"$set": update_fields}, return_document=True
-        #     )
+        # Perform the update
+        result = await self.collection.find_one_and_update(
+            {"_id": ObjectId(payment_id)},
+            {"$set": update_fields},
+            return_document=True,
+        )
 
-        #     if not result:
-        #         raise HTTPException(status_code=400, detail="Update failed")
+        if not result:
+            raise HTTPException(status_code=400, detail="Update failed")
 
-        #     # Handle the next month's ticket if status changed to or from 'paid'
-        #     if "status" in update_fields:
-        #         await self._handle_payment_status_change(payment, result)
+        # Handle the next month's ticket if status changed to or from 'paid'
+        if "status" in update_fields:
+            await self._handle_payment_status_change(payment, result)
 
         return result
 
@@ -474,3 +467,43 @@ class PaymentService(MongoDBService):
                     province=payment["province"],
                 )
                 await self.collection.insert_one(new_ticket.dict())
+
+    async def get_user_data_by_year(self, user_id: str, year: int):
+        query = {"user_id": user_id, "year": year}
+        payments = await self.list(query)
+        return payments
+
+    async def make_single_payment(self, payment: Payment):
+        payment_dict = payment.dict()
+        if "_id" in payment_dict:
+            # Update existing payment
+            payment_id = payment_dict.pop("_id")
+
+            # Ensure _id is a valid ObjectId
+            if not ObjectId.is_valid(payment_id):
+                raise ValueError("Invalid _id format")
+
+            payment_dict["updated_at"] = datetime.utcnow()
+
+            result = await self.collection.update_one(
+                {"_id": ObjectId(payment_id)}, {"$set": payment_dict}
+            )
+
+            if result.modified_count == 0:
+                raise ValueError(f"No payment found with id {payment_id}")
+
+            updated_payment = await self.collection.find_one(
+                {"_id": ObjectId(payment_id)}
+            )
+            return Payment(**updated_payment)
+        else:
+            # Create new payment
+            payment_dict["created_at"] = datetime.utcnow()
+            payment_dict["updated_at"] = payment_dict["created_at"]
+
+            result = await self.collection.insert_one(payment_dict)
+
+            created_payment = await self.collection.find_one(
+                {"_id": result.inserted_id}
+            )
+            return Payment(**created_payment)
