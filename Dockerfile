@@ -1,5 +1,5 @@
 # Use the official Python 3.11 slim image from the Docker Hub
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # Set the working directory in the container
 WORKDIR /app
@@ -27,9 +27,10 @@ COPY constraints.txt /app/
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
+RUN pip install --no-cache-dir python-dateutil celery
 
 # Expose port 80 to the world outside this container
-EXPOSE 80
+EXPOSE 80 5555
 
 # Debugging step: Check if wait-for-it.sh is in the correct location and has execute permissions
 RUN ls -l /app/wait-for-it.sh

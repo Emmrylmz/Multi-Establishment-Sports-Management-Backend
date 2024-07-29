@@ -3,6 +3,7 @@ from typing import List, Optional, Literal
 from datetime import datetime
 from bson.objectid import ObjectId as BsonObjectId
 from bson import ObjectId
+from enum import Enum
 
 
 class PydanticObjectId(BsonObjectId):
@@ -17,12 +18,18 @@ class PydanticObjectId(BsonObjectId):
         return str(v)
 
 
+class UserRole(Enum):
+    PLAYER = "Player"
+    COACH = "Coach"
+    MANAGER = "Manager"
+
+
 class CreateUserSchema(BaseModel):
     email: EmailStr
     password: constr(min_length=8)
     passwordConfirm: str
     name: str
-    role: Literal["Coach", "Player", "Manager"] = "Player"
+    role: UserRole
     teams: List[str] = []
     province: Optional[str]
 
@@ -88,7 +95,7 @@ class UserAttributesSchema(BaseModel):
     photo: str = None
     contact_info: List[ContactInfo] = None
     family_contacts: Optional[List[ContactPerson]] = []
-    # on_boarding = bool = True
+    on_boarding = bool = True
     created_at: Optional[datetime] = None
     discount: Optional[float] = None
     discount_reason: Optional[str] = None

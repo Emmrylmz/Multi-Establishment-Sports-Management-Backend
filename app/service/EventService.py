@@ -11,6 +11,7 @@ from ..utils import ensure_object_id
 from typing import List, Dict, Any
 from pymongo import UpdateOne
 from ..models.event_schemas import CreatePrivateLessonSchema, RequestStatus
+from ..models.attendance_schemas import AttendanceFormSchema
 
 
 class EventService(MongoDBService):
@@ -70,7 +71,9 @@ class EventService(MongoDBService):
             attendance_records.append(attendance_record)
 
         try:
-            await self.attendance_collection.insert_many(attendance_records)
+            result = await self.attendance_collection.insert_many(attendance_records)
+            return result.inserted_ids
+
         except Exception as e:
             raise HTTPException(
                 status_code=500, detail=f"Failed to insert attendance records: {str(e)}"
@@ -78,9 +81,9 @@ class EventService(MongoDBService):
 
         return attendance_records
 
-    async def update_attendance_counts(self, event_type, attendances):
+    async def update_attendance_counts(self, event_type, attendances, session):
         bulk_operations = []
-        user_ids = set()  # Using a set for faster lookups
+        user_ids = set()
 
         for attendance in attendances:
             user_id = ObjectId(attendance.user_id)
@@ -108,10 +111,11 @@ class EventService(MongoDBService):
 
         try:
             if bulk_operations:
-                result = await self.user_collection.bulk_write(bulk_operations)
+                result = await self.user_collection.bulk_write(
+                    bulk_operations, session=session
+                )
                 print(f"Modified {result.modified_count} document(s)")
 
-            # Now update the ratios using an aggregation pipeline
             pipeline = [
                 {"$match": {"_id": {"$in": list(user_ids)}}},
                 {
@@ -130,7 +134,7 @@ class EventService(MongoDBService):
                                         },
                                     ]
                                 },
-                                2,  # Round to 2 decimal places
+                                2,
                             ]
                         }
                     }
@@ -145,7 +149,9 @@ class EventService(MongoDBService):
                 },
             ]
 
-            await self.user_collection.aggregate(pipeline).to_list(None)
+            await self.user_collection.aggregate(pipeline, session=session).to_list(
+                None
+            )
 
         except Exception as e:
             raise HTTPException(
@@ -315,7 +321,7 @@ class EventService(MongoDBService):
         self, lesson_request: CreatePrivateLessonSchema
     ):
         lesson_request_data = lesson_request.dict()
-        lesson_request_data["request_status"] = RequestStatus.pending
+        lesson_request_data["request_status"] = RequestStatus.PENDING
         lesson_request_data["request_date"] = datetime.utcnow()
         lesson_request_data["response_date"] = None
         lesson_request_data["response_notes"] = None

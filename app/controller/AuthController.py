@@ -7,6 +7,7 @@ from ..models.user_schemas import (
     UserAttributesSchema,
     UserResponseSchema,
     User,
+    UserRole,
 )
 from fastapi import APIRouter, Response, status, Depends, HTTPException
 from datetime import datetime, timedelta

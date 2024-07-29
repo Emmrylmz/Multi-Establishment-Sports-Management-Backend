@@ -4,6 +4,7 @@ from ..controller.EventController import EventController
 from ..controller.TeamController import TeamController
 from ..controller.PaymentController import PaymentController
 from ..controller.ConstantsController import ConstantsController
+from ..controller.NoteController import NoteController
 from fastapi import Depends
 from ..oauth2 import require_user
 from ..service.AuthService import AuthService
@@ -13,6 +14,7 @@ from ..service.TeamService import TeamService
 from ..service.PaymentService import PaymentService
 from ..service.EventService import EventService
 from ..service.ConstantsService import ConstantsService
+from ..service.NoteService import NoteService
 from ..dependencies.service_dependencies import (
     get_auth_service,
     get_user_service,
@@ -21,6 +23,7 @@ from ..dependencies.service_dependencies import (
     get_event_service,
     get_payment_service,
     get_constants_service,
+    get_note_service,
 )
 
 
@@ -34,6 +37,7 @@ class BaseRouter:
         event_service: EventService = Depends(get_event_service),
         payment_service: PaymentService = Depends(get_payment_service),
         constants_service: ConstantsService = Depends(get_constants_service),
+        note_service: NoteService = Depends(get_note_service),
     ) -> None:
         self.auth_controller = AuthController(auth_service, token_service, team_service)
         self.user_controller = UserController(user_service)
@@ -43,6 +47,7 @@ class BaseRouter:
         )
         self.payment_controller = PaymentController(payment_service, user_service)
         self.constants_controller = ConstantsController(constants_service)
+        self.note_controller = NoteController(auth_service, note_service)
 
     def get_current_user(self, user: dict = Depends(require_user)):
         return user
@@ -57,6 +62,7 @@ def get_base_router(
     event_service: EventService = Depends(get_event_service),
     payment_service: PaymentService = Depends(get_payment_service),
     constants_service: ConstantsService = Depends(get_constants_service),
+    note_service: NoteService = Depends(get_note_service),
 ) -> BaseRouter:
     return BaseRouter(
         auth_service=auth_service,
@@ -66,4 +72,5 @@ def get_base_router(
         event_service=event_service,
         payment_service=payment_service,
         constants_service=constants_service,
+        note_service=note_service,
     )

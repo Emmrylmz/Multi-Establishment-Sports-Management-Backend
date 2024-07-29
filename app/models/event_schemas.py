@@ -85,9 +85,9 @@ class ListEventResponseSchema(BaseModel):
 
 
 class RequestStatus(str, Enum):
-    pending = "pending"
-    approved = "approved"
-    rejected = "rejected"
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class CreatePrivateLessonSchema(BaseModel):
@@ -102,7 +102,7 @@ class CreatePrivateLessonSchema(BaseModel):
     coach_id: Optional[str]
 
     # New fields for request ticket
-    request_status: RequestStatus = RequestStatus.pending
+    request_status: RequestStatus = RequestStatus.PENDING
     request_date: datetime = Field(default_factory=datetime.utcnow)
     preferred_date: Optional[datetime]
     preferred_time: Optional[str]

@@ -18,6 +18,7 @@ from ..service import EventService, AuthService, PaymentService
 import logging
 from datetime import datetime
 from fastapi.responses import JSONResponse
+from ..celery_app.celery_tasks import update_attendance_counts_task
 
 # from ...main import rabbit_client
 
@@ -129,25 +130,21 @@ class EventController(BaseController):
         return response
 
     async def add_attendance(self, attendance_form: AttendanceFormSchema):
-
         event_id = attendance_form.event_id
         event_type = attendance_form.event_type
         attendances = attendance_form.attendances
+
         try:
-            await self.event_service.add_attendance(
-                event_id,
-                attendances,
-            )
-            await self.event_service.update_attendance_counts(
-                event_type=event_type, attendances=attendances
-            )
-        except HTTPException as e:
-            raise e
+            await self.event_service.add_attendance(event_id, attendances)
+
         except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"An error occurred while processing attendance: {str(e)}",
             )
+        update_attendance_counts_task.delay(
+            event_type, [att.dict() for att in attendances]
+        )
 
         return {"message": "Attendance records added successfully"}
 
@@ -217,7 +214,7 @@ class EventController(BaseController):
                 )
 
             # Check if the request is still pending
-            if existing_request.get("request_status") != RequestStatus.pending:
+            if existing_request.get("request_status") != RequestStatus.PENDING:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Cannot approve a request that is not pending",
@@ -232,7 +229,7 @@ class EventController(BaseController):
                 "lesson_fee": lesson_data.lesson_fee,
                 "paid": lesson_data.paid,
                 "coach_id": user["_id"],  # Replace with actual coach ID if necessary
-                "request_status": RequestStatus.approved,
+                "request_status": RequestStatus.APPROVED,
                 "response_date": datetime.utcnow(),
                 "response_notes": lesson_data.response_notes,
             }

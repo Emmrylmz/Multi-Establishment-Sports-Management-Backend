@@ -91,13 +91,16 @@ class TeamController(BaseController):
         team_id = self.format_handler(team_id)
         players, coaches = await self.team_service.team_users_list(team_id)
 
-        # Convert player IDs to ObjectId if they are in string format
-        player_ids = [self.format_handler(player_id) for player_id in players]
-        coach_ids = [self.format_handler(coach_id) for coach_id in coaches]
+        # Combine player and coach IDs
+        all_user_ids = [self.format_handler(user_id) for user_id in players + coaches]
 
-        # Query all users at once using the $in operator
-        player_infos = await self.user_service.get_users_by_id(player_ids)
-        coach_infos = await self.user_service.get_users_by_id(coach_ids)
+        # Query all users at once
+        all_users = await self.user_service.get_users_by_id(all_user_ids)
+
+        # Separate players and coaches based on their IDs
+        player_infos = [user for user in all_users if user["_id"] in players]
+        coach_infos = [user for user in all_users if user["_id"] in coaches]
+        print("asd", player_infos, coach_infos)
 
         return {"player_infos": player_infos, "coach_infos": coach_infos}
 

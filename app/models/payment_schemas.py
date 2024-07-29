@@ -5,11 +5,24 @@ from bson import ObjectId
 from enum import Enum
 
 
+class PyObjectId(ObjectId):
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, v):
+        if not ObjectId.is_valid(str(v)):
+            raise ValueError("Invalid objectid")
+        return ObjectId(str(v))
+
+
 class PaymentType(str, Enum):
     MONTHLY = "monthly"
     PRIVATE_LESSON = "private_lesson"
     STORE_PURCHASE = "store_purchase"
     OTHER = "other"
+    EXPENSE = "expense"
 
 
 class PaymentWith(str, Enum):
@@ -22,7 +35,9 @@ class PaymentWith(str, Enum):
 
 class Status(str, Enum):
     PENDING = "pending"
+    PARTIALLY_PAID = "partially_paid"
     PAID = "paid"
+    OVERPAID = "overpaid"
     OVERDUE = "overdue"
 
 
@@ -33,6 +48,8 @@ class Payment(BaseModel):
     payment_with: PaymentWith
     due_date: datetime
     amount: float
+    paid_amount: float = 0  # New field to track how much has been paid
+    remaining_amount: float  # New field to track remaining amount
     status: Status
     created_at: datetime = Field(default_factory=datetime.now)
     month: int
@@ -70,19 +87,54 @@ class PrivateLessonResponseSchema(BaseModel):
 
 
 class CreatePaymentForMonthsSchema(BaseModel):
-    id: Optional[str] = Field(None, alias="_id")
+    # id: Optional[str] = Field(None, alias="_id")
     user_id: str
     months_and_amounts: dict
     default_amount: float
     payment_with: PaymentWith
     year: int
-    status: Status
+    status: Optional[Status]
     paid_date: Optional[datetime] = None
     province: str = Field(..., example="Izmir")
 
 
 class PaymentUpdateSchema(BaseModel):
-    amount: Optional[float]
+    paid_amount: Optional[float]
     due_date: Optional[datetime]
     status: Optional[Status]
     province: Optional[str]
+
+
+class PaymentUpdateItem(BaseModel):
+    id: str = Field(alias="_id")
+    paid_amount: float = Field(..., ge=0)
+    payment_with: Optional[PaymentWith] = None
+
+    class Config:
+        allow_population_by_field_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {ObjectId: str}
+
+
+class PaymentUpdateList(BaseModel):
+    payments: List[PaymentUpdateItem]
+
+
+class PaymentUpdateResponse(BaseModel):
+    status: str
+    message: str
+    modified_count: int
+
+
+class ExpenseCreate(BaseModel):
+    user_id: str
+    payment_with: PaymentWith
+    due_date: Optional[datetime] = Field(default_factory=datetime.now)
+    amount: float = Field(..., lt=0)  # Ensure amount is negative
+    description: Optional[str]
+    month: int = Field(..., ge=1, le=12)
+    year: int
+    province: str = Field(..., example="Izmir")
+
+    class Config:
+        json_encoders = {ObjectId: str}
