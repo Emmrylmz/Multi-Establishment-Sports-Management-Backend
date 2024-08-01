@@ -14,20 +14,29 @@ from datetime import datetime, timedelta
 from app.config import settings
 from ..oauth2 import require_user
 from ..models.firebase_token_schemas import PushTokenSchema
-from .BaseController import BaseController
 from ..service.AuthService import AuthService
 from ..service.TokenService import PushTokenService
 from ..service.TeamService import TeamService
 
 
-class AuthController(BaseController):
+class AuthController:
+    @classmethod
+    async def create(
+        cls,
+        auth_service: AuthService,
+        token_service: PushTokenService,
+        team_service: TeamService,
+    ):
+        self = cls.__new__(cls)
+        await self.__init__(auth_service, token_service, team_service)
+        return self
+
     def __init__(
         self,
         auth_service: AuthService,
         token_service: PushTokenService,
         team_service: TeamService,
     ):
-        super().__init__()  # This initializes the BaseController
         self.auth_service = auth_service
         self.token_service = token_service
         self.team_service = team_service

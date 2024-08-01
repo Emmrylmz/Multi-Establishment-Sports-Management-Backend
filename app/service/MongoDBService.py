@@ -6,7 +6,13 @@ from ..utils import ensure_object_id
 
 
 class MongoDBService:
-    def __init__(self, collection: AsyncIOMotorCollection):
+    @classmethod
+    async def create(cls, collection: AsyncIOMotorCollection):
+        self = cls.__new__(cls)
+        await self.__init__(collection)
+        return self
+
+    async def __init__(self, collection: AsyncIOMotorCollection):
         self.collection = collection
 
     async def create(self, data: dict):

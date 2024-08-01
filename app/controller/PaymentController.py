@@ -1,7 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
 from bson import ObjectId
-from .BaseController import BaseController
 from ..oauth2 import require_user
 from ..service import PaymentService, AuthService, UserService
 from datetime import datetime
@@ -18,9 +17,22 @@ from ..models.payment_schemas import (
 from dateutil.relativedelta import relativedelta
 
 
-class PaymentController(BaseController):
-    def __init__(self, payment_service: PaymentService, user_service: UserService):
-        super().__init__()  # Initialize the BaseController
+class PaymentController:
+    @classmethod
+    async def create(
+        cls,
+        payment_service: PaymentService,
+        user_service: UserService,
+    ):
+        self = cls.__new__(cls)
+        await self.__init__(payment_service, user_service)
+        return self
+
+    def __init__(
+        self,
+        payment_service: PaymentService,
+        user_service: UserService,
+    ):
         self.payment_service = payment_service
         self.user_service = user_service
 

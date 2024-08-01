@@ -1,3 +1,10 @@
+python-dateutil
+aiocache
+redis
+contextlib
+python-dotenv==1.0.0
+Faker
+locust
 aio-pika==9.4.1
 fastapi==0.99.1
 firebase-admin
@@ -9,11 +16,8 @@ pymongo==3.12.1
 requests==2.31.0
 six==1.16.0
 uvicorn==0.22.0
-python-dotenv==1.0.0
 fastapi_jwt_auth
 fastapi-jwt-auth[asymmetric]
 email-validator==1.1.3
-python-dateutil
-celery==5.4.0
-flower==2.0.1
 slowapi
+aiohttp

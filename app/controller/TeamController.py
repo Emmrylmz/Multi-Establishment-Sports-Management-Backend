@@ -12,18 +12,27 @@ from ..models.team_schemas import CreateTeamSchema
 from datetime import datetime, timedelta
 from app.config import settings
 from typing import List, Dict, Any, Set
-from .BaseController import BaseController
 from ..service import TeamService, AuthService, UserService
 
 
-class TeamController(BaseController):
+class TeamController:
+    @classmethod
+    async def create(
+        cls,
+        team_service: TeamService,
+        auth_service: AuthService,
+        user_service: UserService,
+    ):
+        self = cls.__new__(cls)
+        await self.__init__(team_service, auth_service, user_service)
+        return self
+
     def __init__(
         self,
         team_service: TeamService,
         auth_service: AuthService,
         user_service: UserService,
     ):
-        super().__init__()  # Initialize the BaseController
         self.team_service = team_service
         self.auth_service = auth_service
         self.user_service = user_service
@@ -89,52 +98,12 @@ class TeamController(BaseController):
 
     async def get_team_users_by_id(self, team_id: str):
         team_id = self.format_handler(team_id)
-        players, coaches = await self.team_service.team_users_list(team_id)
-
-        # Combine player and coach IDs
-        all_user_ids = [self.format_handler(user_id) for user_id in players + coaches]
-
-        # Query all users at once
-        all_users = await self.user_service.get_users_by_id(all_user_ids)
-
-        # Separate players and coaches based on their IDs
-        player_infos = [user for user in all_users if user["_id"] in players]
-        coach_infos = [user for user in all_users if user["_id"] in coaches]
-        print("asd", player_infos, coach_infos)
-
-        return {"player_infos": player_infos, "coach_infos": coach_infos}
+        return await self.team_service.get_team_users_by_id(team_id)
 
     async def get_teams_by_id(self, team_ids: List[str]):
         object_ids = [self.format_handler(team_id) for team_id in team_ids]
         teams = await self.team_service.get_teams_by_id(object_ids)
         return teams
-
-    async def get_team_and_user_info(self, team_id: str):
-        team_id = self.format_handler(team_id)
-
-        # Fetch team information
-        team_info = await self.team_service.get_by_id(team_id)
-        if not team_info:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Team not found"
-            )
-
-        # Fetch players and coaches IDs
-        players, coaches = await self.team_users_list(team_id)
-
-        # Convert IDs to ObjectId format
-        player_ids = [self.format_handler(player_id) for player_id in players]
-        coach_ids = [self.format_handler(coach_id) for coach_id in coaches]
-
-        # Fetch user information
-        player_infos = await self.user_service.get_users_by_id(player_ids)
-        coach_infos = await self.user_service.get_users_by_id(coach_ids)
-
-        # Append user info to team info
-        team_info["team_players"] = player_infos
-        team_info["team_coaches"] = coach_infos
-
-        return team_info
 
     async def get_team_coaches(self, team_ids: List[str]):
         try:

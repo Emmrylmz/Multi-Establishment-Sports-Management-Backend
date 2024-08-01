@@ -1,4 +1,4 @@
-from fastapi import APIRouter, status, Depends, HTTPException, Request
+from fastapi import APIRouter, status, Depends, HTTPException, Request, BackgroundTasks
 from ..controller.EventController import EventController
 from ..models.event_schemas import (
     CreateEventSchema,
@@ -13,7 +13,7 @@ from ..models.attendance_schemas import (
     UpdateAttendanceSchema,
 )
 from ..oauth2 import require_user
-from .BaseRouter import BaseRouter, get_base_router
+from ..dependencies.controller_dependencies import get_event_controller
 from fastapi_jwt_auth import AuthJWT
 from typing import Dict
 
@@ -30,17 +30,17 @@ async def create_event(
     payload: CreateEventSchema,
     request: Request,
     user_id: str = Depends(require_user),
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.create_event(payload, request, user_id)
+    return await event_controller.create_event(payload, request, user_id)
 
 
 @router.get("/{event_id}", status_code=status.HTTP_200_OK)
 async def get_event(
     event_id: str,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.read_event(event_id)
+    return await event_controller.read_event(event_id)
 
 
 @router.delete(
@@ -50,17 +50,9 @@ async def get_event(
 )
 async def delete_event(
     event_id: str,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.delete_event(event_id)
-
-
-# @router.post("/list")
-# async def list_events(
-#     request: ListTeamEventSchema,
-#     base_router: BaseRouter = Depends(get_base_router),
-# ):
-#     return await base_router.event_controller.list_events(request.team_id)
+    return await event_controller.delete_event(event_id)
 
 
 @router.post(
@@ -71,55 +63,51 @@ async def delete_event(
 async def update_event(
     event_id: str,
     payload: UpdateEventSchema,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.update_event(event_id, payload)
+    return await event_controller.update_event(event_id, payload)
 
 
 @router.post("/get_team_events")
 async def fetch_team_events(
     team_ids: ListTeamEventSchema,
     user_id: str = Depends(require_user),
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.get_team_events(team_ids.team_ids)
+    return await event_controller.get_team_events(team_ids.team_ids)
 
 
 @router.post("/add_attendances_to_event")
 async def add_attendances_to_event(
     attendance_form: AttendanceFormSchema,
     # user_id: str = Depends(require_user),
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.add_attendance(
-        attendance_form=attendance_form
-    )
+    return await event_controller.add_attendance(attendance_form=attendance_form)
 
 
 @router.post("/fetch_attendances_for_event")
 async def fetch_attendances_for_event(
     payload: FetchAttendanceFromEventIdSchema,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.fetch_attendances_for_event(
-        payload.event_id
-    )
+    return await event_controller.fetch_attendances_for_event(payload.event_id)
 
 
 @router.post("/get_upcoming_events")
 async def get_upcoming_events(
     payload: ListTeamEventSchema,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.get_upcoming_events(payload.team_ids)
+    return await event_controller.get_upcoming_events(payload.team_ids)
 
 
 @router.put("/update_attendances")
 async def update_attendances(
     payload: UpdateAttendanceSchema,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.update_attendances(
+    return await event_controller.update_attendances(
         attendances=payload.attendances,
         event_id=payload.event_id,
         event_type=payload.event_type,
@@ -131,11 +119,9 @@ async def create_private_lesson_request(
     payload: CreatePrivateLessonSchema,
     request: Request,
     # user_id: str = Depends(require_user),
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.create_private_lesson_request(
-        payload, request
-    )
+    return await event_controller.create_private_lesson_request(payload, request)
 
 
 @router.post("/approve/private_lesson_response/{lesson_id}")
@@ -144,9 +130,9 @@ async def approve_private_lesson_request(
     request: Request,
     lesson_id: str,
     user_id: str = Depends(require_user),
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
 ):
-    return await base_router.event_controller.approve_private_lesson(
+    return await event_controller.approve_private_lesson(
         lesson_data=payload, request=request, lesson_id=lesson_id, user_id=user_id
     )
 
@@ -154,19 +140,19 @@ async def approve_private_lesson_request(
 @router.get("/coach_private_lessons/{coach_id}")
 async def fetch_coach_private_lessons(
     coach_id: str,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
     # user_id: str = Depends(require_user),
 ):
-    return await base_router.event_controller.get_private_lesson_by_coach_id(coach_id)
+    return await event_controller.get_private_lesson_by_coach_id(coach_id)
 
 
 @router.get("/player_private_lessons/{player_id}")
 async def fetch_coach_private_lessons(
     player_id: str,
-    base_router: BaseRouter = Depends(get_base_router),
+    event_controller: EventController = Depends(get_event_controller),
     # user_id: str = Depends(require_user),
 ):
-    return await base_router.event_controller.get_private_lesson_by_player_id(player_id)
+    return await event_controller.get_private_lesson_by_player_id(player_id)
 
 
 # @router.post("/create/private_lesson_request", response_model=PrivateLessonRequestOut)
@@ -174,8 +160,9 @@ async def fetch_coach_private_lessons(
 #     Request: Request,
 #     payload: PrivateLessonRequestCreate,
 #     # current_user: dict = Depends(get_current_user),
-#     base_router: BaseRouter = Depends(get_base_router),
+#   event_controller: EventController = Depends(get_event_controller),
+
 # ):
-#     return await base_router.event_controller.create_private_lesson_request(
+#     return await event_controller.create_private_lesson_request(
 #         Request, payload
 #     )

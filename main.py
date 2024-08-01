@@ -1,7 +1,12 @@
 # main.py
 
-from fastapi import WebSocket, Depends
+import cProfile
+import io
+import pstats
+import time
+from fastapi import Request, WebSocket, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from app.config import settings
 from app.routers.auth import router as auth_router
 from app.routers.event import router as event_router
@@ -10,22 +15,42 @@ from app.routers.note import router as notes_router
 from app.routers.team import router as team_router
 from app.routers.payment import router as payment_router
 from app.routers.constants import router as constants_router
-from app.database import (
-    connect_to_mongo,
-    close_mongo_connection,
-)
-from app.database import connect_to_mongo_sync
 from app.main.main_app import FooApp
+
+
+class ProfilingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        profiler = cProfile.Profile()
+        profiler.enable()
+        start_time = time.time()
+
+        response = await call_next(request)
+
+        process_time = time.time() - start_time
+        profiler.disable()
+
+        s = io.StringIO()
+        ps = pstats.Stats(profiler, stream=s).sort_stats("cumulative")
+        ps.print_stats(20)
+
+        print(f"Request to {request.url} took {process_time:.2f} seconds")
+        print(s.getvalue())
+
+        return response
 
 
 app = FooApp(
     rabbit_url=settings.RABBITMQ_URL,
     firebase_cred_path=settings.FIREBASE_CREDENTIALS_PATH,
     database_uri=settings.DATABASE_URL,
+    redis_url=settings.REDIS_URL,
 )
 
+# Add profiler middleware if in debug mode
+# app.add_middleware(ProfilingMiddleware)
+
 # Add rate limiting middleware
-app.add_rate_limit_middleware()
+# app.add_rate_limit_middleware()
 
 # CORS setup
 origins = ["*"]
@@ -51,7 +76,6 @@ app.include_router(notes_router, tags=["notes"], prefix="/api/notes")
 @app.on_event("startup")
 async def startup_event():
     await app.initialize_services()
-    connect_to_mongo_sync()
 
 
 @app.on_event("shutdown")

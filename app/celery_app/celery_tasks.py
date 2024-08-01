@@ -1,6 +1,5 @@
 from bson import ObjectId
 from .celery_setup import celery_task
-from ..database import get_database_sync, connect_to_mongo_sync
 from fastapi import Depends
 from celery.exceptions import Retry
 from pymongo import MongoClient, UpdateOne
@@ -8,7 +7,7 @@ from celery import shared_task
 
 mongo_client = MongoClient(
     "mongodb+srv://banleue13:Mrfadeaway.1@cluster0.lvzd0dt.mongodb.net/?retryWrites=true&w=majority",
-    maxPoolSize=10,
+    maxPoolSize=100,
 )
 
 
@@ -94,11 +93,11 @@ def update_attendance_counts_task(self, event_type, attendances):
             db.client.close()
 
 
-@celery_task
-def check_db_connection():
-    try:
-        db = get_database_sync()
-        db.client.admin.command("ismaster")
-    except Exception as e:
-        print(f"Database connection lost. Reconnecting... Error: {str(e)}")
-        connect_to_mongo_sync()
+# @celery_task
+# def check_db_connection():
+#     try:
+#         db = get_database_sync()
+#         db.client.admin.command("ismaster")
+#     except Exception as e:
+#         print(f"Database connection lost. Reconnecting... Error: {str(e)}")
+#         connect_to_mongo_sync()

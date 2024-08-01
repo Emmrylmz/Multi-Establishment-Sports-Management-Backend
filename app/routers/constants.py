@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, Request, status
 from ..oauth2 import require_user
-from .BaseRouter import BaseRouter, get_base_router
 from typing import List
 from ..models.constant_schemas import (
     ConstantCreate,
@@ -8,6 +7,8 @@ from ..models.constant_schemas import (
     ConstantUpdate,
     ConstantAmountGetResponse,
 )
+from ..controller.ConstantsController import ConstantsController
+from ..dependencies.controller_dependencies import get_constants_controller
 
 router = APIRouter()
 
@@ -17,46 +18,47 @@ router = APIRouter()
 )
 async def create_constant(
     constant: ConstantCreate,
-    base_router: BaseRouter = Depends(get_base_router),
+    constant_controller: ConstantsController = Depends(get_constants_controller),
 ):
-    return await base_router.constants_controller.create_constant(constant)
+    return await constants_controller.create_constant(constant)
 
 
 @router.get("/all", response_model=List[ConstantResponse])
 async def get_all_constants(
-    base_router: BaseRouter = Depends(get_base_router),
+    constant_controller: ConstantsController = Depends(get_constants_controller),
 ):
-    return await base_router.constants_controller.get_all_constants()
+    return await constants_controller.get_all_constants()
 
 
 @router.get("/get/{constant_id}", response_model=ConstantResponse)
 async def get_constant(
     constant_id: str,
-    base_router: BaseRouter = Depends(get_base_router),
+    constant_controller: ConstantsController = Depends(get_constants_controller),
 ):
-    return await base_router.constants_controller.get_constant(constant_id)
+    return await constants_controller.get_constant(constant_id)
 
 
 @router.put("/update/{constant_id}", response_model=ConstantResponse)
 async def update_constant(
     constant_id: str,
     constant: ConstantUpdate,
-    base_router: BaseRouter = Depends(get_base_router),
+    constant_controller: ConstantsController = Depends(get_constants_controller),
 ):
-    return await base_router.constants_controller.update_constant(constant_id, constant)
+    return await constants_controller.update_constant(constant_id, constant)
 
 
 @router.delete("/delete/{constant_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_constant(
     constant_id: str,
-    base_router: BaseRouter = Depends(get_base_router),
+    constant_controller: ConstantsController = Depends(get_constants_controller),
 ):
-    await base_router.constants_controller.delete_constant(constant_id)
+    await constants_controller.delete_constant(constant_id)
     return None
 
 
 @router.get("/get/key/{key}", response_model=ConstantAmountGetResponse)
 async def get_constant_by_key(
-    key: str, base_router: BaseRouter = Depends(get_base_router)
+    key: str,
+    constant_controller: ConstantsController = Depends(get_constants_controller),
 ):
-    return await base_router.constants_controller.get_constant_by_key(key)
+    return await constants_controller.get_constant_by_key(key)

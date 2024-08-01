@@ -1,120 +1,144 @@
-# app/services/user_service.py
 from fastapi import Depends, Query
 from .. import utils
 from datetime import datetime
 from bson import ObjectId
-import logging
 from ..config import settings
 from pymongo.collection import Collection
-from motor.motor_asyncio import AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from ..service.MongoDBService import MongoDBService
 from ..database import get_collection
-from typing import List
+from typing import List, Dict, Any, Optional
+from ..redis_client import RedisClient
 
 
 class UserService(MongoDBService):
-    def __init__(self, collection: AsyncIOMotorCollection):
-        self.collection = collection
-        self.collection = get_collection("User_Info")
-        super().__init__(self.collection)
+    @classmethod
+    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self = cls.__new__(cls)
+        await self.__init__(database, redis_client)
+        return self
 
-    async def get_users_by_id(self, player_ids):
-        # Query all users at once using the $in operator
+    async def __init__(self, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self.database = database
+        self.redis_client = redis_client
+        self.collection = await get_collection("User_Info", database)
+        await super().__init__(self.collection)
+
+    async def get_users_by_id(self, player_ids: List[str]) -> List[Dict[str, Any]]:
+        cache_key = f"users_by_id:{','.join(sorted(player_ids))}"
+        cached_data = await self.redis_client.get(cache_key)
+        if cached_data:
+            return cached_data
+
+        object_ids = [ObjectId(id) for id in player_ids]
         cursor = self.collection.find(
-            {"_id": {"$in": player_ids}},
+            {"_id": {"$in": object_ids}},
             {"name": 1, "photo": 1, "_id": 1, "discount": 1},
         )
 
-        # Convert cursor to list
         user_infos = await cursor.to_list(length=None)
 
+        # Convert ObjectId to string for JSON serialization
+        for user in user_infos:
+            user["_id"] = str(user["_id"])
+
+        await self.redis_client.set(
+            cache_key, user_infos, expire=300
+        )  # Cache for 5 minutes
         return user_infos
 
-    # async def get_discount_by_user_id(self, user_id):
-    #     user_discount = await self.collection.find_one(
-    #         {"_id": ObjectId(user_id)}, {"discount": 1, "_id": 0}
-    #     )
+    async def search_users_by_name(self, query: str) -> List[Dict[str, Any]]:
+        cache_key = f"search_users:{query}"
+        cached_data = await self.redis_client.get(cache_key)
+        if cached_data:
+            return cached_data
 
-    #     return user_discount.get("dues", 0)
-
-    async def search_users_by_name(self, query: str):
-        # Create a case-insensitive regex pattern
         pattern = f".*{query}.*"
         regex = {"$regex": pattern, "$options": "i"}
 
-        # Search for users whose name matches the query
         users = await self.collection.find(
             {"name": regex}, {"_id": 1, "name": 1, "photo": 1}
         ).to_list(length=None)
+
+        # Convert ObjectId to string for JSON serialization
+        for user in users:
+            user["_id"] = str(user["_id"])
+
+        await self.redis_client.set(cache_key, users, expire=60)  # Cache for 1 minute
         return users
 
+    async def update_user(self, user_id: str, update_data: dict) -> bool:
+        result = await self.collection.update_one(
+            {"_id": ObjectId(user_id)}, {"$set": update_data}
+        )
 
-# def get_current_user(token: str = Depends(user_service.get_current_user_token)):
-#     """
+        # Invalidate caches
+        await self.invalidate_user_caches(user_id)
 
-#     Dependency function to get the current user based on the provided token.
+        return result.modified_count > 0
 
-#     This assumes you have a method `get_current_user_token` in UserService
+    async def invalidate_user_caches(self, user_id: str):
+        # Invalidate individual user cache
+        await self.redis_client.delete(f"users_by_id:{user_id}")
 
-#     or another service that can retrieve the user's token.
-#     """
+        # Invalidate group user caches containing this user
+        group_keys = await self.redis_client.keys(f"users_by_id:*{user_id}*")
+        if group_keys:
+            await self.redis_client.delete(*group_keys)
 
-#     # Assuming UserService returns a User object or None if user not found
+        # Invalidate search caches
+        search_keys = await self.redis_client.keys("search_users:*")
+        if search_keys:
+            await self.redis_client.delete(*search_keys)
 
-#     current_user = user_service.get_user_by_token(token)
+    async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        cache_key = f"user:{user_id}"
+        cached_data = await self.redis_client.get(cache_key)
+        if cached_data:
+            return cached_data
 
-#     if current_user is None:
+        user = await self.collection.find_one({"_id": ObjectId(user_id)})
+        if user:
+            user["_id"] = str(user["_id"])
+            await self.redis_client.set(
+                cache_key, user, expire=300
+            )  # Cache for 5 minutes
+        return user
 
-#         # Raise HTTPException if user is not authenticated
+    async def create_user(self, user_data: Dict[str, Any]) -> str:
+        result = await self.collection.insert_one(user_data)
+        user_id = str(result.inserted_id)
 
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Could not validate credentials",
-#             headers={"WWW-Authenticate": "Bearer"},
-#         )
+        # Invalidate relevant caches
+        await self.invalidate_user_caches(user_id)
 
-#         return current_user
+        return user_id
 
-# @staticmethod
-# async def get_current_user(self, token: str = Depends(verify_token)):
-#     """
-#     Dependency function to get the current user based on the provided JWT token.
-#     """
-#     # Assuming verify_token returns a dict with user data or None if token is invalid
-#     user_data = await self.verify_token(token)
+    async def delete_user(self, user_id: str) -> bool:
+        result = await self.collection.delete_one({"_id": ObjectId(user_id)})
 
-#     if user_data is None:
-#         # Raise HTTPException if token is invalid or user not found
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Could not validate credentials",
-#             headers={"WWW-Authenticate": "Bearer"},
-#         )
+        # Invalidate relevant caches
+        await self.invalidate_user_caches(user_id)
 
-#     # Assuming you have a method to get the user from the user data
-#     current_user = await self.get_user_by_data(user_data)
+        return result.deleted_count > 0
 
-#     if current_user is None:
-#         # Raise HTTPException if user not found
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="User not found",
-#             headers={"WWW-Authenticate": "Bearer"},
-#         )
+    async def get_users_by_criteria(
+        self, criteria: Dict[str, Any], limit: int = 20, skip: int = 0
+    ) -> List[Dict[str, Any]]:
+        cache_key = (
+            f"users_by_criteria:{hash(frozenset(criteria.items()))}:{limit}:{skip}"
+        )
+        cached_data = await self.redis_client.get(cache_key)
+        if cached_data:
+            return cached_data
 
-#     return current_user
+        users = (
+            await self.collection.find(criteria).skip(skip).limit(limit).to_list(None)
+        )
 
-# async def get_user_by_data(self, user_data: dict) -> User:
-#     """
-#     Method to get the user object based on user data extracted from JWT token.
-#     This is just a placeholder. You should replace it with your actual user retrieval logic.
-#     """
-#     # Assuming you have a method to get the user object from the user data in the token
-#     # Replace this with your actual user retrieval logic based on user data
-#     # For example, if user_data contains user ID, you can retrieve the user object from the database
-#     # Here's a simplified example assuming user data contains user ID
-#     user_id = user_data.get("user_id")
-#     # Assuming you have a database connection and a method to get the user by ID
-#     # Replace this with your actual database query
-#     user = await db.get_user_by_id(user_id)
-#     return user
+        # Convert ObjectId to string for JSON serialization
+        for user in users:
+            user["_id"] = str(user["_id"])
+
+        await self.redis_client.set(cache_key, users, expire=300)  # Cache for 5 minutes
+        return users

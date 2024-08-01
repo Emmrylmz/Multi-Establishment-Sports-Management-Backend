@@ -5,49 +5,59 @@ from datetime import datetime
 from bson import ObjectId
 import logging
 from ..config import settings
-from ..database import get_collection
+from ..database import get_collection, get_database
 from pymongo.collection import Collection
-from motor.motor_asyncio import AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from ..service.MongoDBService import MongoDBService
+from ..redis_client import RedisClient
+from bson.json_util import dumps, loads
+from typing import List, Optional, Dict, Any
 
 
 class AuthService(MongoDBService):
-    def __init__(self, collection: AsyncIOMotorCollection):
-        self.collection = collection
-        self.deleted_user_collection = get_collection("Deleted_User")
-        super().__init__(self.collection)
+    @classmethod
+    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self = cls.__new__(cls)
+        await self.__init__(database, redis_client)
+        return self
 
-    async def check_user_exists(self, email: str):
-        response = await self.collection.find_one({"email": email.lower()})
-        if response:
-            print(f"User found: {response}")  # Debug logging
-            return response
-        else:
-            print("No user found")  # Debug logging
-            return None
+    async def __init__(self, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self.database = database
+        self.redis_client = redis_client
+        self.collection = await get_collection("Auth", database)
+        self.deleted_user_collection = await get_collection("Deleted_User", database)
+        await super().__init__(self.collection)
 
-    async def verify_user_credentials(self, email: str, password: str):
+    async def check_user_exists(self, email: str) -> Optional[Dict[str, Any]]:
+        cache_key = f"user:{email.lower()}"
+        cached_user = await self.redis_client.get(cache_key)
+        if cached_user:
+            return loads(cached_user)
 
         user = await self.collection.find_one({"email": email.lower()})
-        jls_extract_var = user
-        if not user or not utils.verify_password(password, jls_extract_var["password"]):
+        if user:
+            await self.redis_client.set(
+                cache_key, dumps(user), expire=3600
+            )  # Cache for 1 hour
+            return user
+        return None
 
+    async def verify_user_credentials(
+        self, email: str, password: str
+    ) -> Optional[Dict[str, Any]]:
+        user = await self.check_user_exists(email)
+        if not user or not utils.verify_password(password, user["password"]):
             return None
-
         return user
 
-    from fastapi import HTTPException, status
-
-    async def validate_role(self, user_id, role):
-        # Check if the user object is None
-        user = await self.get_by_id(ObjectId(user_id))
+    async def validate_role(self, user_id: str, role: str) -> Dict[str, Any]:
+        user = await self.get_user_by_id(user_id)
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="No user data available to validate role",
             )
 
-        # Now check the role
         if user.get("role") != role:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -56,39 +66,80 @@ class AuthService(MongoDBService):
 
         return user
 
-    async def check_role(self, user_id):
-        # Check if the user object is None
-        user = await self.get_by_id(ObjectId(user_id))
+    async def check_role(self, user_id: str) -> str:
+        user = await self.get_user_by_id(user_id)
         if user is None:
             raise ValueError("No user data available to validate role")
-
-        # Now check the role
         return user.get("role")
 
-    async def get_users_by_role_and_province(self, role: str, province: str):
-        return self.collection.find({"role": role, "province": province})
+    async def get_users_by_role_and_province(
+        self,
+        role: str,
+        province: str,
+        skip: int = 0,
+        limit: int = 20,
+        fields: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        cache_key = f"users:role:{role}:province:{province}:skip:{skip}:limit:{limit}:fields:{fields}"
+        cached_users = await self.redis_client.get(cache_key)
+        if cached_users:
+            return loads(cached_users)
 
-    async def update_user_team_ids(self, user_id: str, team_ids: list):
+        projection = {field: 1 for field in fields} if fields else None
+        users = (
+            await self.collection.find(
+                {"role": role, "province": province}, projection=projection
+            )
+            .skip(skip)
+            .limit(limit)
+            .to_list(None)
+        )
+
+        await self.redis_client.set(
+            cache_key, dumps(users), expire=3600
+        )  # Cache for 1 hour
+        return users
+
+    async def update_user_team_ids(self, user_id: str, team_ids: List[str]):
         await self.collection.update_one(
             {"_id": ObjectId(user_id)}, {"$set": {"teams": team_ids}}
         )
+        await self.invalidate_user_cache(user_id)
 
-    async def delete_user(self, user: dict):
-        # Insert user into the deleted_user_collection
+    async def delete_user(self, user: Dict[str, Any]) -> Dict[str, Any]:
         response_insert = await self.deleted_user_collection.insert_one(user)
         user_id = user["_id"]
 
-        # Delete the user from the original collection
         response_delete = await self.collection.delete_one({"_id": ObjectId(user_id)})
 
-        # Check if the delete operation was successful
         if response_delete.deleted_count == 0:
             raise HTTPException(status_code=500, detail="Failed to delete user")
+
+        await self.invalidate_user_cache(str(user_id))
 
         return {
             "deleted_count": response_delete.deleted_count,
             "inserted_id": str(response_insert.inserted_id),
         }
+
+    async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        cache_key = f"user:id:{user_id}"
+        cached_user = await self.redis_client.get(cache_key)
+        if cached_user:
+            return loads(cached_user)
+
+        user = await self.get_by_id(ObjectId(user_id))
+        if user:
+            await self.redis_client.set(
+                cache_key, dumps(user), expire=3600
+            )  # Cache for 1 hour
+        return user
+
+    async def invalidate_user_cache(self, user_id: str):
+        user = await self.get_by_id(ObjectId(user_id))
+        if user:
+            await self.redis_client.delete(f"user:id:{user_id}")
+            await self.redis_client.delete(f"user:{user['email'].lower()}")
 
 
 # @staticmethod

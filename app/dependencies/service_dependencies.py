@@ -1,7 +1,8 @@
 # dependencies.py
-from fastapi import Depends
-from motor.motor_asyncio import AsyncIOMotorCollection
-from ..database import get_collection
+from fastapi import Depends, Request
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from ..database import get_database
+from ..redis_client import RedisClient
 from ..service.TokenService import PushTokenService
 from ..service.TeamService import TeamService
 from ..service.EventService import EventService
@@ -10,67 +11,68 @@ from ..service.AuthService import AuthService
 from ..service.PaymentService import PaymentService
 from ..service.ConstantsService import ConstantsService
 from ..service.NoteService import NoteService
+from ..redis_client.RedisClient import get_redis_client
 
 
-def get_push_token_service(
-    push_token_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("Push_Token")
-    ),
-) -> PushTokenService:
-    return PushTokenService(push_token_collection)
+def get_db(request: Request) -> AsyncIOMotorDatabase:
+    return request.app.mongodb
 
 
-def get_team_service(
-    team_collection: AsyncIOMotorCollection = Depends(lambda: get_collection("Team")),
-) -> TeamService:
-    return TeamService(team_collection)
+def get_redis(request: Request) -> RedisClient:
+    return request.app.redis_client
 
 
-def get_event_service(
-    event_collection: AsyncIOMotorCollection = Depends(lambda: get_collection("Event")),
-) -> EventService:
-    return EventService(event_collection)
+async def get_event_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await EventService.create(db, redis)
 
 
-def get_user_service(
-    user_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("User_Info")
-    ),
-) -> UserService:
-    return UserService(user_collection)
+async def get_auth_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await AuthService.create(db, redis)
 
 
-def get_auth_service(
-    auth_collection: AsyncIOMotorCollection = Depends(lambda: get_collection("Auth")),
-) -> AuthService:
-    return AuthService(auth_collection)
+async def get_payment_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await PaymentService.create(db, redis)
 
 
-def get_attendance_service(
-    attendance_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("Attendance")
-    ),
-) -> EventService:
-    return EventService(attendance_collection)
+async def get_team_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await TeamService.create(db, redis)
 
 
-def get_payment_service(
-    payment_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("Payment")
-    ),
-) -> PaymentService:
-    return PaymentService(payment_collection)
+async def get_push_token_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await PushTokenService.create(db, redis)
 
 
-def get_constants_service(
-    constant_collection: AsyncIOMotorCollection = Depends(
-        lambda: get_collection("Constant")
-    ),
-) -> ConstantsService:
-    return ConstantsService(constant_collection)
+async def get_constants_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await ConstantsService.create(db, redis)
 
 
-def get_note_service(
-    note_collection: AsyncIOMotorCollection = Depends(lambda: get_collection("Note")),
-) -> NoteService:
-    return NoteService(note_collection)
+async def get_note_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await NoteService.create(db, redis)
+
+
+async def get_user_service(
+    db: AsyncIOMotorDatabase = Depends(get_db),
+    redis: RedisClient = Depends(get_redis_client),
+):
+    return await UserService.create(db, redis)

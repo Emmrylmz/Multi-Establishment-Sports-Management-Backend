@@ -2,11 +2,26 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
 from pydantic import BaseModel
 from ..models.user_schemas import UserAttributesSchema
 from bson import ObjectId
-from .BaseController import BaseController
 from ..oauth2 import require_user
+from ..service import UserService
 
 
-class UserController(BaseController):
+class UserController:
+    @classmethod
+    async def create(
+        cls,
+        user_service: UserService,
+    ):
+        self = cls.__new__(cls)
+        await self.__init__(user_service)
+        return self
+
+    def __init__(
+        self,
+        user_service: UserService,
+    ):
+        self.user_service = user_service
+
     async def update_user_information(
         self,
         payload: UserAttributesSchema,

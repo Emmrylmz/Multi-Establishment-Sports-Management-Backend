@@ -6,17 +6,26 @@ from bson import ObjectId
 import logging
 from ..config import settings
 from pymongo.collection import Collection
-from motor.motor_asyncio import AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from ..service.MongoDBService import MongoDBService
 from ..database import get_collection
 from typing import List
 from ..models.note_schemas import NoteType, NoteInDB, NoteCreate, NoteResponse
+from ..redis_client import RedisClient
 
 
 class NoteService(MongoDBService):
-    def __init__(self, collection: AsyncIOMotorCollection):
-        self.collection = get_collection("Note")
-        super().__init__(self.collection)
+    @classmethod
+    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self = cls.__new__(cls)
+        await self.__init__(database, redis_client)
+        return self
+
+    async def __init__(self, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self.database = database
+        self.redis_client = redis_client
+        self.collection = await get_collection("Note", database)
+        await super().__init__(self.collection)
 
     async def create_note(self, payload: NoteCreate) -> NoteResponse:
         # Validate the payload based on note_type

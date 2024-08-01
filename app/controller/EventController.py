@@ -1,4 +1,12 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Depends,
+    status,
+    Request,
+    Query,
+    BackgroundTasks,
+)
 from pydantic import BaseModel
 from ..models.event_schemas import (
     CreateEventSchema,
@@ -12,28 +20,47 @@ from ..models.event_schemas import (
 )
 from ..models.attendance_schemas import AttendanceFormSchema
 from bson import ObjectId
-from .BaseController import BaseController
 from typing import List, Dict, Any
-from ..service import EventService, AuthService, PaymentService
+from ..service import EventService, AuthService, PaymentService, TeamService
+from ..redis_client import RedisClient
 import logging
 from datetime import datetime
 from fastapi.responses import JSONResponse
 from ..celery_app.celery_tasks import update_attendance_counts_task
+from ..dependencies.service_dependencies import (
+    get_auth_service,
+    get_payment_service,
+    get_team_service,
+    get_event_service,
+)
 
 # from ...main import rabbit_client
 
 
-class EventController(BaseController):
+class EventController:
+    @classmethod
+    async def create(
+        cls,
+        event_service: EventService,
+        auth_service: AuthService,
+        payment_service: PaymentService,
+        team_service: TeamService,
+    ):
+        self = cls.__new__(cls)
+        await self.__init__(event_service, auth_service, payment_service, team_service)
+        return self
+
     def __init__(
         self,
         event_service: EventService,
         auth_service: AuthService,
         payment_service: PaymentService,
+        team_service: TeamService,
     ):
-        super().__init__()  # This initializes the BaseController
         self.event_service = event_service
         self.auth_service = auth_service
         self.payment_service = payment_service
+        self.team_service = team_service
 
     async def create_event(
         self,
@@ -129,7 +156,9 @@ class EventController(BaseController):
         response = ListEventResponseSchema(team_name=team["team_name"], events=events)
         return response
 
-    async def add_attendance(self, attendance_form: AttendanceFormSchema):
+    async def add_attendance(
+        self, attendance_form: AttendanceFormSchema, background_tasks: BackgroundTasks
+    ):
         event_id = attendance_form.event_id
         event_type = attendance_form.event_type
         attendances = attendance_form.attendances
@@ -142,8 +171,10 @@ class EventController(BaseController):
                 status_code=500,
                 detail=f"An error occurred while processing attendance: {str(e)}",
             )
-        update_attendance_counts_task.delay(
-            event_type, [att.dict() for att in attendances]
+        background_tasks.add_task(
+            update_attendance_counts_task.delay,
+            event_type,
+            [att.dict() for att in attendances],
         )
 
         return {"message": "Attendance records added successfully"}
@@ -314,3 +345,15 @@ class EventController(BaseController):
         return await self.event_service.get_private_lesson_by_user_id(
             id=player_id, field="player_id"
         )
+
+
+async def get_event_controller(
+    event_service: EventService = Depends(get_event_service),
+    auth_service: AuthService = Depends(get_auth_service),
+    payment_service: PaymentService = Depends(get_payment_service),
+    team_service: TeamService = Depends(get_team_service),
+) -> EventController:
+
+    return await EventController.create(
+        event_service, auth_service, payment_service, team_service
+    )

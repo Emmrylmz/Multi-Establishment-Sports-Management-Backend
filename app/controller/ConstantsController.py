@@ -1,13 +1,17 @@
 from fastapi import HTTPException, status
 from ..models.constant_schemas import ConstantCreate, ConstantUpdate, ConstantResponse
-from .BaseController import BaseController
 from typing import List, Optional
 from ..service.ConstantsService import ConstantsService
 
 
-class ConstantsController(BaseController):
+class ConstantsController:
+    @classmethod
+    async def create(cls, constants_service: ConstantsService):
+        self = cls.__new__(cls)
+        await self.__init__(constants_service)
+        return self
+
     def __init__(self, constants_service: ConstantsService):
-        super().__init__()
         self.constants_service = constants_service
 
     async def create_constant(self, constant: ConstantCreate) -> ConstantResponse:

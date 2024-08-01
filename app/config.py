@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     RABBITMQ_URL: str
     FIREBASE_CREDENTIALS_PATH: str
     CELERY_RESULT_BACKEND: str
+    REDIS_URL: str
 
     class Config:
         env_file = "./.env"

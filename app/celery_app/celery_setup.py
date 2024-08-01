@@ -1,11 +1,11 @@
 from ..config import settings
 from .CeleryClient import CeleryClient
-from ..database import connect_to_mongo_sync, close_mongo_connection
+from collections import deque
 
 celery_app = CeleryClient(
     app_name="foo_app",
     broker_url=settings.RABBITMQ_URL,
-    backend_url=settings.CELERY_RESULT_BACKEND,
+    backend_url=settings.REDIS_URL,
 )
 
 
@@ -16,8 +16,6 @@ def celery_task(func):
 
 @celery_app.task(bind=True)
 def init_celery_app(self):
-    # This task will run when Celery worker starts,
-    # ensuring database connection is established
     connect_to_mongo_sync()
 
 

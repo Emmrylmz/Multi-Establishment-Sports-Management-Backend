@@ -7,8 +7,9 @@ from ..models.team_schemas import (
     TeamCoachesQuery,
 )
 from ..oauth2 import require_user
-from .BaseRouter import BaseRouter, get_base_router
 from typing import List
+from ..controller.TeamController import TeamController
+from ..dependencies.controller_dependencies import get_team_controller
 
 router = APIRouter()
 
@@ -20,62 +21,58 @@ async def create_team(
     team: CreateTeamSchema,
     request: Request,
     user_id: dict = Depends(require_user),
-    base_router: BaseRouter = Depends(get_base_router),
+    team_controller: TeamController = Depends(get_team_controller),
 ):
     """
     Create a new team.
     """
-    return await base_router.team_controller.register_team(team, request, user_id)
+    return await team_controller.register_team(team, request, user_id)
 
 
 @router.post("/insert_users_to_teams", status_code=status.HTTP_201_CREATED)
 async def insert_user(
-    request: UserInsert,
-    base_router: BaseRouter = Depends(get_base_router),
+    request: UserInsert, team_controller: TeamController = Depends(get_team_controller)
 ):
     """
     Insert users into teams.
     """
-    return await base_router.team_controller.add_user_to_team(
+    return await team_controller.add_user_to_team(
         team_ids=request.team_ids, user_ids=request.user_ids
     )
 
 
 @router.post("/get_team_users", status_code=status.HTTP_200_OK)
 async def get_team_users(
-    payload: TeamPlayers,
-    base_router: BaseRouter = Depends(get_base_router),
+    payload: TeamPlayers, team_controller: TeamController = Depends(get_team_controller)
 ):
     """
     Get users of a team by team ID.
     """
-    return await base_router.team_controller.get_team_users_by_id(
-        team_id=payload.team_id
-    )
+    return await team_controller.get_team_users_by_id(team_id=payload.team_id)
 
 
 @router.post("/get_team_by_id", status_code=status.HTTP_200_OK)
 async def get_team_by_id(
     request: TeamQueryById,
-    base_router: BaseRouter = Depends(get_base_router),
+    team_controller: TeamController = Depends(get_team_controller),
 ):
     """
     Get team details by team IDs.
     """
-    return await base_router.team_controller.get_teams_by_id(team_ids=request.team_ids)
+    return await team_controller.get_teams_by_id(team_ids=request.team_ids)
 
 
 @router.post("/get_team_coaches", status_code=status.HTTP_200_OK)
 async def get_team_coaches(
     payload: TeamCoachesQuery,
-    base_router: BaseRouter = Depends(get_base_router),
+    team_controller: TeamController = Depends(get_team_controller),
 ):
-    return await base_router.team_controller.get_team_coaches(team_ids=payload.team_ids)
+    return await team_controller.get_team_coaches(team_ids=payload.team_ids)
 
 
 @router.get("/get_all_coaches_by_province/{province}", status_code=status.HTTP_200_OK)
 async def get_all_coaches(
-    base_router: BaseRouter = Depends(get_base_router),
+    team_controller: TeamController = Depends(get_team_controller),
     province: str = None,
 ):
-    return await base_router.team_controller.get_all_coaches(province=province)
+    return await team_controller.get_all_coaches(province=province)

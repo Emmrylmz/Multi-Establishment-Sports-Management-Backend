@@ -6,7 +6,7 @@ import logging
 from ..config import settings
 from ..database import get_collection
 from pymongo.collection import Collection
-from motor.motor_asyncio import AsyncIOMotorCollection
+from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
 from ..service.MongoDBService import MongoDBService
 from ..models.constant_schemas import (
     ConstantCreate,
@@ -14,12 +14,21 @@ from ..models.constant_schemas import (
     ConstantResponse,
 )
 from typing import List, Optional
+from ..redis_client import RedisClient
 
 
 class ConstantsService(MongoDBService):
-    def __init__(self, collection: AsyncIOMotorCollection):
-        self.collection = collection
-        super().__init__(self.collection)
+    @classmethod
+    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self = cls.__new__(cls)
+        await self.__init__(database, redis_client)
+        return self
+
+    async def __init__(self, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+        self.database = database
+        self.redis_client = redis_client
+        self.collection = await get_collection("Constants", database)
+        await super().__init__(self.collection)
 
     async def create_constant(self, constant: ConstantCreate) -> ConstantResponse:
         now = datetime.utcnow()

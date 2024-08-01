@@ -18,6 +18,8 @@ ENV FIREBASE_CREDENTIALS_PATH=/service/firebaseKey.json
 # Ensure the Firebase credentials file is in the correct path
 COPY app/service/firebaseKey.json /service/firebaseKey.json
 
+COPY requirements.txt constraints.txt ./
+
 # Copy the wait-for-it.sh script into the container and make it executable
 COPY ./wait-for-it.sh ./wait-for-it.sh
 RUN chmod +x /app/wait-for-it.sh
@@ -27,7 +29,6 @@ COPY constraints.txt /app/
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
-RUN pip install --no-cache-dir python-dateutil celery
 
 # Expose port 80 to the world outside this container
 EXPOSE 80 5555

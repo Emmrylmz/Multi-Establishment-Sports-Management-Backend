@@ -12,18 +12,26 @@ from ..models.note_schemas import NoteCreate, NoteResponse, NoteType
 from datetime import datetime, timedelta
 from app.config import settings
 from typing import List, Dict, Any, Set
-from .BaseController import BaseController
 from ..service import TeamService, AuthService, UserService, NoteService
 from pydantic import ValidationError
 
 
-class NoteController(BaseController):
+class NoteController:
+    @classmethod
+    async def create(
+        cls,
+        auth_service: AuthService,
+        note_service: NoteService,
+    ):
+        self = cls.__new__(cls)
+        await self.__init__(auth_service, note_service)
+        return self
+
     def __init__(
         self,
         auth_service: AuthService,
         note_service: NoteService,
     ):
-        super().__init__()  # Initialize the BaseController
         self.auth_service = auth_service
         self.note_service = note_service
 
@@ -57,7 +65,6 @@ class NoteController(BaseController):
             "action": "created",
             "note_type": payload.note_type,
         }
-        print(payload.note_type, "porno")
         # Determine the routing key based on the note type
         if payload.note_type == NoteType.INDIVIDUAL:
             routing_key = f"user.{payload.recipient_id}.notification"
