@@ -17,6 +17,7 @@ from ..models.firebase_token_schemas import PushTokenSchema
 from ..service.AuthService import AuthService
 from ..service.TokenService import PushTokenService
 from ..service.TeamService import TeamService
+from bson import ObjectId
 
 
 class AuthController:
@@ -59,7 +60,7 @@ class AuthController:
         province = user_data.get("province")
 
         # If user role is manager, fetch all team ids
-        if user_data.get("role") == "Manager" and province and len(province) > 0:
+        if user_data.get("role") == UserRole.MANAGER and province and len(province) > 0:
             team_ids = await self.team_service.get_all_teams_by_province(
                 province=province
             )
@@ -80,13 +81,15 @@ class AuthController:
         user_data.pop("passwordConfirm", None)
 
         new_user = await self.auth_service.create(user_data)
-        user_id = self.format_handler(new_user["_id"])
+        user_id = ObjectId(new_user["_id"])
         user_dict = {k: v for k, v in new_user.items() if k != "password"}
 
         if len(payload.teams) > 0:
 
             user_role_field = (
-                "team_players" if user_data["role"] == "Player" else "team_coaches"
+                "team_players"
+                if user_data["role"] == UserRole.PLAYER
+                else "team_coaches"
             )
             result = await self.team_service.add_users_to_teams(
                 user_ids=[user_id],
@@ -219,7 +222,7 @@ class AuthController:
     async def get_push_token(
         self, payload: PushTokenSchema, user_id: str = Depends(require_user)
     ):
-        user = await self.auth_service.get_by_id(self.format_handler(user_id))
+        user = await self.auth_service.get_by_id(ObjectId(user_id))
         try:
             user_id = user["_id"]
             result = await self.token_service.save_token(payload, user_id)
@@ -239,7 +242,7 @@ class AuthController:
 
     async def delete_user(self, user_id: str):
         try:
-            user_id_obj = self.format_handler(user_id)
+            user_id_obj = ObjectId(user_id)
         except Exception as e:
             raise HTTPException(
                 status_code=400, detail=f"Invalid user ID format: {str(e)}"

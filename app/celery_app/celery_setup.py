@@ -1,6 +1,8 @@
 from ..config import settings
 from .CeleryClient import CeleryClient
-from collections import deque
+from celery.signals import worker_process_init, worker_process_shutdown
+from .celery_db_access import db
+from celery.schedules import crontab
 
 celery_app = CeleryClient(
     app_name="foo_app",
@@ -8,33 +10,25 @@ celery_app = CeleryClient(
     backend_url=settings.REDIS_URL,
 )
 
+celery_app.conf.broker_connection_retry_on_startup = True
+celery_app.autodiscover_tasks(["app.celery_app"])
 
-# This will be used to register tasks
+
+@worker_process_init.connect
+def init_worker(**kwargs):
+    db.connect()
+
+
+@worker_process_shutdown.connect
+def shutdown_worker(**kwargs):
+    db.close()
+
+
 def celery_task(func):
-    return celery_app.register_task(func)
+    def wrapper(*args, **kwargs):
+        return func(db, *args, **kwargs)
 
+    return celery_app.register_task(wrapper)
 
-@celery_app.task(bind=True)
-def init_celery_app(self):
-    connect_to_mongo_sync()
-
-
-@celery_app.on_after_configure.connect
-def setup_periodic_tasks(sender, **kwargs):
-    sender.add_periodic_task(
-        30.0,  # Run every 30 seconds
-        init_celery_app.s(),
-        name="initialize database connection",
-    )
-
-
-# @celery_app.task(bind=True)
-# def close_db_connection(self):
-#     close_mongo_connection()
-
-
-# @celery_app.on_after_finalize.connect
-# def shutdown_celery(sender, **kwargs):
-#     # close_db_connection.delay()
 
 celery = celery_app.app

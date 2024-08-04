@@ -12,11 +12,14 @@ from ..service.MongoDBService import MongoDBService
 from ..redis_client import RedisClient
 from bson.json_util import dumps, loads
 from typing import List, Optional, Dict, Any
+from ..models.user_schemas import UserRole
 
 
 class AuthService(MongoDBService):
     @classmethod
-    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+    async def initialize(
+        cls, database: AsyncIOMotorDatabase, redis_client: RedisClient
+    ):
         self = cls.__new__(cls)
         await self.__init__(database, redis_client)
         return self
@@ -50,7 +53,7 @@ class AuthService(MongoDBService):
             return None
         return user
 
-    async def validate_role(self, user_id: str, role: str) -> Dict[str, Any]:
+    async def validate_role(self, user_id: str, role: "str") -> Dict[str, Any]:
         user = await self.get_user_by_id(user_id)
         if user is None:
             raise HTTPException(
@@ -74,7 +77,7 @@ class AuthService(MongoDBService):
 
     async def get_users_by_role_and_province(
         self,
-        role: str,
+        role: UserRole,
         province: str,
         skip: int = 0,
         limit: int = 20,

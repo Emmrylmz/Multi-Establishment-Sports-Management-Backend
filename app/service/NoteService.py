@@ -16,7 +16,9 @@ from ..redis_client import RedisClient
 
 class NoteService(MongoDBService):
     @classmethod
-    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+    async def initialize(
+        cls, database: AsyncIOMotorDatabase, redis_client: RedisClient
+    ):
         self = cls.__new__(cls)
         await self.__init__(database, redis_client)
         return self

@@ -3,13 +3,15 @@ from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from ..service.TokenService import PushTokenService
-from ..rabbit_client import RabbitClient
-from ..service.FirebaseService import FirebaseService
-from ..database import ensure_indexes
-from ..celery_app.celery_setup import celery_app
+
+# from service.TokenService import PushTokenService
+from app.rabbit_client import RabbitClient
+
+from app.service.FirebaseService import FirebaseService
+from app.database import ensure_indexes
+from app.celery_app.celery_setup import celery_app
 from functools import wraps
-from ..redis_client.RedisClient import redis_client
+from app.redis_client.RedisClient import redis_client
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 from functools import lru_cache
@@ -67,7 +69,7 @@ class FooApp(FastAPI):
         await self.rabbit_client.start()
         await self.rabbit_client.start_consumers()
 
-        self.firebase_service = FirebaseService(self.firebase_cred_path)
+        await FirebaseService.initialize(self.firebase_cred_path)
 
         # Initialize Redis connection
         self.state.redis_url = self.redis_url
@@ -76,7 +78,7 @@ class FooApp(FastAPI):
     async def close_services(self):
         await self.redis_client.close()
         if self.rabbit_client:
-            await self.rabbit_client.close()
+            await self.rabbit_client.stop()
 
     @property
     def limiter(self):

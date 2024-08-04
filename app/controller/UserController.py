@@ -27,7 +27,7 @@ class UserController:
         payload: UserAttributesSchema,
         user_id: str = Depends(require_user),
     ):
-        user_id = self.format_handler(user_id)
+        user_id = ObjectId(user_id)
         payload_dict = payload.dict()
         print(payload_dict)
         on_boarding = payload_dict.pop("on_boarding", None)

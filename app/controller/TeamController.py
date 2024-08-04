@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 from app.config import settings
 from typing import List, Dict, Any, Set
 from ..service import TeamService, AuthService, UserService
+from ..models.user_schemas import UserRole
+from bson import ObjectId
 
 
 class TeamController:
@@ -44,7 +46,7 @@ class TeamController:
         user_id: dict,
     ):
         app = request.app
-        user = await self.auth_service.validate_role(user_id, "Coach")
+        user = await self.auth_service.validate_role(user_id, UserRole.COACH)
         team_data = team_payload.dict()
 
         # Create the team
@@ -80,10 +82,10 @@ class TeamController:
         return created_team
 
     async def add_user_to_team(self, team_ids, user_ids):
-        user_ids = [self.format_handler(user_id) for user_id in user_ids]
-        team_ids = [self.format_handler(team_id) for team_id in team_ids]
+        user_ids = [ObjectId(user_id) for user_id in user_ids]
+        team_ids = [ObjectId(team_id) for team_id in team_ids]
         role = await self.auth_service.check_role(user_id=user_ids[0])
-        user_role_field = "team_players" if role == "Player" else "team_coaches"
+        user_role_field = "team_players" if role == UserRole.PLAYER else "team_coaches"
         user_response = await self.team_service.add_users_to_teams(
             team_ids=team_ids,
             user_ids=user_ids,
@@ -97,18 +99,18 @@ class TeamController:
         }
 
     async def get_team_users_by_id(self, team_id: str):
-        team_id = self.format_handler(team_id)
+        team_id = ObjectId(team_id)
         return await self.team_service.get_team_users_by_id(team_id)
 
     async def get_teams_by_id(self, team_ids: List[str]):
-        object_ids = [self.format_handler(team_id) for team_id in team_ids]
+        object_ids = [ObjectId(team_id) for team_id in team_ids]
         teams = await self.team_service.get_teams_by_id(object_ids)
         return teams
 
     async def get_team_coaches(self, team_ids: List[str]):
         try:
             # Convert team_ids to ObjectId
-            team_object_ids = [self.format_handler(team_id) for team_id in team_ids]
+            team_object_ids = [ObjectId(team_id) for team_id in team_ids]
 
             # Aggregation pipeline to fetch teams and their coaches
             result = await self.team_service.get_team_coaches(team_object_ids)

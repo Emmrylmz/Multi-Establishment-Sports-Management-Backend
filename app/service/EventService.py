@@ -9,8 +9,13 @@ from fastapi import Depends, HTTPException, status, Request
 from ..utils import ensure_object_id
 from typing import List, Dict, Any
 from pymongo import UpdateOne
-from ..models.event_schemas import CreatePrivateLessonSchema, RequestStatus
-from ..models.attendance_schemas import AttendanceFormSchema
+from ..models.event_schemas import (
+    CreatePrivateLessonSchema,
+    RequestStatus,
+    EventType,
+    EventResponseSchema,
+)
+from ..models.attendance_schemas import AttendanceFormSchema, AttendanceRecord
 from ..redis_client import RedisClient
 from ..database import get_database, get_collection
 from bson.json_util import dumps, loads
@@ -19,7 +24,9 @@ from typing import Optional
 
 class EventService(MongoDBService):
     @classmethod
-    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+    async def initialize(
+        cls, database: AsyncIOMotorDatabase, redis_client: RedisClient
+    ):
         self = cls.__new__(cls)
         await self.__init__(database, redis_client)
         return self
@@ -55,6 +62,10 @@ class EventService(MongoDBService):
         if self._user_collection is None:
             self._user_collection = await get_collection("User_Info", self.database)
         return self._user_collection
+
+    async def get_private_lesson_by_id(self, private_lesson_id: str):
+        collection = await self.private_lesson_collection
+        return await collection.find_one({"_id": private_lesson_id})
 
     async def get_all_events_by_team_id(
         self,
@@ -99,12 +110,12 @@ class EventService(MongoDBService):
         await self.redis_client.set(cache_key, dumps(results), expire=300)
         return results
 
-    async def add_attendance(self, event_id: str, attendances: List[Dict[str, Any]]):
+    async def add_attendance(self, event_id: str, attendances):
         attendance_records = [
             {
                 "event_id": ObjectId(event_id),
-                "user_id": attendance["user_id"],
-                "status": attendance["status"],
+                "user_id": attendance.user_id,
+                "status": attendance.status.value,  # Use .value to get the string representation
                 "timestamp": datetime.now(),
             }
             for attendance in attendances
@@ -225,38 +236,34 @@ class EventService(MongoDBService):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def update_attendance(self, event_id: str, event_type: str, new_attendances):
-        event_object_id = ObjectId(event_id)
+    async def update_attendance(
+        self, new_attendances: List[AttendanceRecord], event_id: str
+    ):
 
-        event = await self.collection.find_one({"_id": event_object_id})
-        if not event:
-            raise HTTPException(status_code=404, detail="Event not found")
-
-        existing_attendances = await self.attendance_collection.find(
-            {"event_id": event_object_id}
-        ).to_list(None)
-
-        existing_attendances_dict = {
-            str(att["user_id"]): att["status"] for att in existing_attendances
-        }
-
-        attendance_updates = []
-
+        # Prepare bulk write operations
+        bulk_operations = []
         for attendance in new_attendances:
-            user_id = attendance.user_id
+            attendance_id = ObjectId(attendance.id)
             new_status = attendance.status
 
-            attendance_updates.append(
+            bulk_operations.append(
                 UpdateOne(
-                    {"event_id": event_object_id, "user_id": user_id},
+                    {"_id": attendance_id},
                     {"$set": {"status": new_status}},
-                    upsert=True,
+                    upsert=False,  # We don't want to create new documents, only update existing ones
                 )
             )
 
+        # Perform bulk write operation
+        if bulk_operations:
+            result = await self.attendance_collection.bulk_write(bulk_operations)
+
+        # Clear cache
         await self.redis_client.delete(f"attendances_{event_id}")
 
-        return {"message": "Attendance records updated successfully"}
+        status = "success" if result and result.modified_count > 0 else "failure"
+        # Create and return the EventResponseSchema
+        return EventResponseSchema(event_id=event_id, status=status)
 
     async def create_private_lesson(self, lesson_data: dict):
         collection = await self.private_lesson_collection

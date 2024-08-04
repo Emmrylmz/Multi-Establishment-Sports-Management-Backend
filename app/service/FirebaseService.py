@@ -1,24 +1,21 @@
 import firebase_admin
 from firebase_admin import credentials, exceptions
-from ..database import get_collection
-import os
-from motor.motor_asyncio import AsyncIOMotorCollection
-from fastapi import Depends
-from ..service.MongoDBService import MongoDBService
 from ..config import settings
+from ..service.MongoDBService import MongoDBService
+from motor.motor_asyncio import AsyncIOMotorCollection
 
 
-class FirebaseService(MongoDBService):
-    def __init__(
-        self,
-        collection: AsyncIOMotorCollection,
+class FirebaseService:
+    @classmethod
+    async def initialize(
+        cls,
         cred_path: str = settings.FIREBASE_CREDENTIALS_PATH,
     ):
-        self.collection = collection
-        super().__init__(self.collection)
+        self = cls.__new__(cls)
         self.cred_path = cred_path
         self.firebase_app = None
         self.init_firebase()
+        return self
 
     def init_firebase(self):
         try:
@@ -39,6 +36,3 @@ class FirebaseService(MongoDBService):
             self.firebase_app = None
         else:
             print("No Firebase app instance to delete.")
-
-
-# Usage example with the cleanup function

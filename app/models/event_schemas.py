@@ -19,8 +19,14 @@ class PyObjectId(ObjectId):
         return ObjectId(v)
 
 
+class EventType(str, Enum):
+    GAME = "game"
+    PRIVATE_LESSON = "private_lesson"
+    TRAINING = "training"
+
+
 class CreateEventSchema(BaseModel):
-    event_type: str
+    event_type: EventType
     place: str
     start_datetime: datetime  # Combined start date and time
     end_datetime: datetime  # Combined end date and time
@@ -63,7 +69,7 @@ class ListTeamEventSchema(BaseModel):
 class UpdateEventSchema(BaseModel):
     event_date: Optional[datetime]  # corrected from event_data
     place: Optional[str]
-    event_type: Optional[str]
+    event_type: Optional[EventType]
     description: Optional[str]
 
 
@@ -73,7 +79,7 @@ class EventResponseSchema(BaseModel):
 
 
 class Event(BaseModel):
-    event_type: str
+    event_type: EventType
     place: str
     event_date: datetime  # corrected from event_data
     description: str

@@ -9,11 +9,14 @@ from typing import List, Dict, Any, Optional
 from aiocache import cached
 from aiocache.serializers import PickleSerializer
 from ..redis_client import RedisClient
+from ..models.user_schemas import UserRole
 
 
 class TeamService(MongoDBService):
     @classmethod
-    async def create(cls, database: AsyncIOMotorDatabase, redis_client: RedisClient):
+    async def initialize(
+        cls, database: AsyncIOMotorDatabase, redis_client: RedisClient
+    ):
         self = cls.__new__(cls)
         await self.__init__(database, redis_client)
         return self
@@ -266,7 +269,7 @@ class TeamService(MongoDBService):
         if cached_data:
             return cached_data
 
-        query = {"role": "Coach", "province": province}
+        query = {"role": UserRole.COACH, "province": province}
         if cursor:
             query["_id"] = {"$gt": ObjectId(cursor)}
 

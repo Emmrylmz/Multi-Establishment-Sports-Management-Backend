@@ -26,53 +26,53 @@ async def get_event_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await EventService.create(db, redis)
+    return await EventService.initialize(db, redis)
 
 
 async def get_auth_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await AuthService.create(db, redis)
+    return await AuthService.initialize(db, redis)
 
 
 async def get_payment_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await PaymentService.create(db, redis)
+    return await PaymentService.initialize(db, redis)
 
 
 async def get_team_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await TeamService.create(db, redis)
+    return await TeamService.initialize(db, redis)
 
 
 async def get_push_token_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await PushTokenService.create(db, redis)
+    return await PushTokenService.initialize(db, redis)
 
 
 async def get_constants_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await ConstantsService.create(db, redis)
+    return await ConstantsService.initialize(db, redis)
 
 
 async def get_note_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await NoteService.create(db, redis)
+    return await NoteService.initialize(db, redis)
 
 
 async def get_user_service(
     db: AsyncIOMotorDatabase = Depends(get_db),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await UserService.create(db, redis)
+    return await UserService.initialize(db, redis)

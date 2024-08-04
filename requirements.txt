@@ -1,7 +1,10 @@
 python-dateutil
 aiocache
 redis
-contextlib
+httpx
+pytest
+fastapi
+# contextlib
 python-dotenv==1.0.0
 Faker
 locust

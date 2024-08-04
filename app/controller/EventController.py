@@ -5,7 +5,6 @@ from fastapi import (
     status,
     Request,
     Query,
-    BackgroundTasks,
 )
 from pydantic import BaseModel
 from ..models.event_schemas import (
@@ -18,7 +17,8 @@ from ..models.event_schemas import (
     PrivateLessonResponseSchema,
     RequestStatus,
 )
-from ..models.attendance_schemas import AttendanceFormSchema
+from ..models.attendance_schemas import AttendanceFormSchema, AttendanceRecord
+from ..models.user_schemas import UserRole
 from bson import ObjectId
 from typing import List, Dict, Any
 from ..service import EventService, AuthService, PaymentService, TeamService
@@ -26,15 +26,12 @@ from ..redis_client import RedisClient
 import logging
 from datetime import datetime
 from fastapi.responses import JSONResponse
-from ..celery_app.celery_tasks import update_attendance_counts_task
 from ..dependencies.service_dependencies import (
     get_auth_service,
     get_payment_service,
     get_team_service,
     get_event_service,
 )
-
-# from ...main import rabbit_client
 
 
 class EventController:
@@ -70,12 +67,12 @@ class EventController:
     ):
         # Role check - ensuring only "Coach" can create events
         app = request.app
-        user = await self.auth_service.validate_role(user_id, role="Coach")
+        user = await self.auth_service.validate_role(user_id, role=UserRole.COACH.value)
 
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
         event_data["creator_name"] = user["name"]
-        event_data["team_id"] = self.format_handler(event_data["team_id"])
+        event_data["team_id"] = ObjectId(event_data["team_id"])
         # Call to your service layer to save the event asynchronously
         created_event = await self.event_service.create(event_data)
         if not created_event:
@@ -99,7 +96,7 @@ class EventController:
 
     async def update_event(self, event_id: str, event: UpdateEventSchema):
         # update
-        data_id = self.format_handler(event_id)
+        data_id = ObjectId(event_id)
         updated_event = await self.event_service.update(
             data_id, event.dict(exclude_unset=True)
         )
@@ -121,7 +118,7 @@ class EventController:
             logging.error(f"Invalid team_id type: {type(team_id)}, value: {team_id}")
             raise HTTPException(status_code=400, detail="Invalid team_id format")
 
-        team_id = self.format_handler(team_id)
+        team_id = ObjectId(team_id)
         query = {"team_id": team_id}
         events = await self.event_service.list(query)
         team = await self.team_service.get_by_id(team_id)
@@ -149,33 +146,27 @@ class EventController:
             logging.error(f"Invalid team_id type: {type(team_id)}, value: {team_id}")
             raise HTTPException(status_code=400, detail="Invalid team_id format")
 
-        team_id = self.format_handler(team_id)
+        team_id = ObjectId(team_id)
         query = {"team_id": team_id}
         events = await self.event_service.list(query)
         team = await self.team_service.get_by_id(team_id)
         response = ListEventResponseSchema(team_name=team["team_name"], events=events)
         return response
 
-    async def add_attendance(
-        self, attendance_form: AttendanceFormSchema, background_tasks: BackgroundTasks
-    ):
+    async def add_attendance(self, attendance_form: AttendanceFormSchema):
         event_id = attendance_form.event_id
-        event_type = attendance_form.event_type
         attendances = attendance_form.attendances
 
         try:
-            await self.event_service.add_attendance(event_id, attendances)
+            await self.event_service.add_attendance(
+                event_id=event_id, attendances=attendances
+            )
 
         except Exception as e:
             raise HTTPException(
                 status_code=500,
                 detail=f"An error occurred while processing attendance: {str(e)}",
             )
-        background_tasks.add_task(
-            update_attendance_counts_task.delay,
-            event_type,
-            [att.dict() for att in attendances],
-        )
 
         return {"message": "Attendance records added successfully"}
 
@@ -186,11 +177,9 @@ class EventController:
         return await self.event_service.get_upcoming_events(team_ids)
 
     async def update_attendances(
-        self, event_id: str, event_type: str, attendances: List
+        self, attendances: List[AttendanceRecord], event_id: str
     ):
-        result = await self.event_service.update_attendance(
-            event_id, event_type, attendances
-        )
+        return await self.event_service.update_attendance(attendances, event_id)
 
     async def create_private_lesson_request(
         self,
@@ -220,7 +209,9 @@ class EventController:
         request: Request,
     ):
         try:
-            user = await self.auth_service.validate_role(user_id, role="Coach")
+            user = await self.auth_service.validate_role(
+                user_id, role=UserRole.COACH.value
+            )
             app = request.app
 
             if not lesson_id:
@@ -230,10 +221,8 @@ class EventController:
                 )
 
             # Fetch the existing lesson request
-            existing_request = (
-                await self.event_service.private_lesson_collection.find_one(
-                    {"_id": ObjectId(lesson_id)}
-                )
+            existing_request = await self.event_service.get_private_lesson_by_id(
+                ObjectId(lesson_id)
             )
 
             print(f"Existing request: {existing_request}")  # Debug print
@@ -277,10 +266,8 @@ class EventController:
                 )
 
             # Fetch the updated lesson data
-            created_lesson = (
-                await self.event_service.private_lesson_collection.find_one(
-                    {"_id": ObjectId(lesson_id)}
-                )
+            created_lesson = await self.event_service.get_private_lesson_by_id(
+                {"_id": ObjectId(lesson_id)}
             )
 
             if not created_lesson:

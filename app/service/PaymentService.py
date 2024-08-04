@@ -21,7 +21,7 @@ from .MongoDBService import MongoDBService
 
 class PaymentService(MongoDBService):
     @classmethod
-    async def create(cls, database, redis_client: RedisClient):
+    async def initialize(cls, database, redis_client: RedisClient):
         self = cls.__new__(cls)
         await self.__init__(database, redis_client)
         return self

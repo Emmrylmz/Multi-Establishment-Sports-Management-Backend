@@ -33,7 +33,7 @@ async def ensure_indexes(db: AsyncIOMotorDatabase = Depends(get_database)):
             [("payment_type", 1), ("due_date", 1), ("status", 1)], background=True
         )
         await db.Attendance.create_index("event_id")
-        await db.Attendance.create_index("user_id")
+        await db.Attendance.create_index("timestamp")
         await db.Auth.create_index("email")
         await db.Team.create_index("team_id")
 
