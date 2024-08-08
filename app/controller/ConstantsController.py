@@ -36,7 +36,7 @@ class ConstantsController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
             )
 
-    async def get_all_constants(self) -> List[ConstantResponse]:
+    async def get_all_constants(self) -> List[ConstantCreate]:
         try:
             return await self.constants_service.get_all_constants()
         except Exception as e:
@@ -44,7 +44,7 @@ class ConstantsController:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
             )
 
-    async def get_constant(self, constant_id: str) -> ConstantResponse:
+    async def get_constant(self, constant_id: str) -> ConstantCreate:
         try:
             constant = await self.constants_service.get_constant(constant_id)
             if constant is None:

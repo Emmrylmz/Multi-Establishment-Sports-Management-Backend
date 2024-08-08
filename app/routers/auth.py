@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
-from fastapi import Response, status, Depends, HTTPException, APIRouter
+from fastapi import Response, status, Depends, HTTPException, APIRouter, Request
 from app import oauth2
 from .. import utils
 from ..models.user_schemas import (
@@ -84,3 +84,37 @@ async def delete_user(
     auth_controller: AuthController = Depends(get_auth_controller),
 ):
     return await auth_controller.delete_user(user_id=user_id)  # , Authorize
+
+
+@router.get("/inspect-celery")
+def inspect_celery_endpoint(request: Request):
+    app = request.app
+    celery_app = app.celery_app
+    result = inspect_celery_tasks(celery_app)
+    return {"message": "Celery inspection complete", "result": result}
+
+
+def inspect_celery_tasks(celery_app):
+    # Create an inspect instance
+    i = celery_app.control.inspect()
+
+    # Get scheduled tasks
+    scheduled = i.scheduled()
+
+    if scheduled:
+        for worker, tasks in scheduled.items():
+            print(f"Scheduled tasks for worker {worker}:")
+            for task in tasks:
+                print(f"  - {task['name']} : {task['schedule']}")
+    else:
+        print("No scheduled tasks found.")
+
+    # Check registered tasks
+    registered = i.registered()
+    if registered:
+        for worker, tasks in registered.items():
+            print(f"Registered tasks for worker {worker}:")
+            for task in tasks:
+                print(f"  - {task}")
+    else:
+        print("No registered tasks found.")

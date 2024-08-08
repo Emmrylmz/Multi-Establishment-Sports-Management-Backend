@@ -1,10 +1,10 @@
+from fastapi import HTTPException, status
 from bson import ObjectId
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from fastapi import HTTPException, status
 from typing import List, Dict, Any
 from bson.json_util import dumps, loads
-from pymongo import UpdateOne
+from pymongo import UpdateOne, InsertOne
 from pymongo.errors import BulkWriteError
 from ..models.payment_schemas import (
     Payment,
@@ -13,10 +13,12 @@ from ..models.payment_schemas import (
     PaymentType,
     Status,
     PaymentWith,
+    SinglePayment,
 )
 from ..redis_client import RedisClient
 from ..database import get_collection
 from .MongoDBService import MongoDBService
+from ..celery_app.celery_tasks import update_monthly_balance, invalidate_caches
 
 
 class PaymentService(MongoDBService):
@@ -28,106 +30,9 @@ class PaymentService(MongoDBService):
 
     async def __init__(self, database, redis_client: RedisClient):
         self.collection = await get_collection("Payment", database)
-        self.balance_collection = await get_collection("Monthly_Balances", database)
+        self.balance_collection = await get_collection("Monthly_Balance", database)
         self.redis_client = redis_client
         await super().__init__(self.collection)
-
-    async def update_monthly_balance(
-        self, year: int, month: int, province: str, amount_change: float, session=None
-    ):
-        update_operation = {
-            "$inc": {"total_balance": amount_change},
-            "$set": {"last_updated": datetime.utcnow()},
-        }
-        if session:
-            await self.balance_collection.update_one(
-                {
-                    "year": year,
-                    "month": month,
-                    "province": province,
-                    "document_type": "monthly_balance",
-                },
-                update_operation,
-                upsert=True,
-                session=session,
-            )
-        else:
-            await self.balance_collection.update_one(
-                {
-                    "year": year,
-                    "month": month,
-                    "province": province,
-                    "document_type": "monthly_balance",
-                },
-                update_operation,
-                upsert=True,
-            )
-        await self.invalidate_cache(f"monthly_balance:{year}:{month}:{province}")
-
-    async def get_monthly_revenue(self, month: int, year: int):
-        cache_key = f"monthly_revenue:{year}:{month}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result:
-            return loads(cached_result)
-
-        pipeline = [
-            {"$match": {"month": month, "year": year, "status": Status.PAID}},
-            {"$group": {"_id": None, "total_revenue": {"$sum": "$amount"}}},
-        ]
-        result = await self.collection.aggregate(pipeline).to_list(length=1)
-        total_revenue = result[0]["total_revenue"] if result else 0
-
-        await self.redis_client.set(cache_key, dumps(total_revenue), expire=3600)
-        return total_revenue
-
-    async def get_annual_revenue(self, year: int):
-        cache_key = f"annual_revenue:{year}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result:
-            return loads(cached_result)
-
-        pipeline = [
-            {"$match": {"year": year, "status": Status.PAID}},
-            {"$group": {"_id": None, "total_revenue": {"$sum": "$amount"}}},
-        ]
-        result = await self.collection.aggregate(pipeline).to_list(length=1)
-        total_revenue = result[0]["total_revenue"] if result else 0
-
-        await self.redis_client.set(cache_key, dumps(total_revenue), expire=3600)
-        return total_revenue
-
-    async def get_revenue_by_month_range(
-        self, year: int, start_month: int = 0, end_month: int = 11
-    ):
-        cache_key = f"revenue_by_month_range:{year}:{start_month}:{end_month}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result:
-            return loads(cached_result)
-
-        pipeline = [
-            {
-                "$match": {
-                    "month": {"$gte": start_month, "$lte": end_month},
-                    "year": year,
-                    "status": Status.PAID,
-                }
-            },
-            {"$group": {"_id": "$month", "revenue": {"$sum": "$amount"}}},
-            {"$sort": {"_id": 1}},
-            {
-                "$group": {
-                    "_id": None,
-                    "months": {"$push": {"month": "$_id", "revenue": "$revenue"}},
-                    "total": {"$sum": "$revenue"},
-                }
-            },
-            {"$project": {"_id": 0, "months": 1, "total": 1}},
-        ]
-        result = await self.collection.aggregate(pipeline).to_list(length=1)
-        revenue_data = result[0] if result else {"months": [], "total": 0}
-
-        await self.redis_client.set(cache_key, dumps(revenue_data), expire=3600)
-        return revenue_data
 
     async def get_user_data_by_year(self, user_id: str, year: int):
         cache_key = f"user_data_by_year:{user_id}:{year}"
@@ -264,24 +169,18 @@ class PaymentService(MongoDBService):
             "year": year,
             "total_earned_overall": total_earned_overall,
             "total_tickets_overall": total_tickets_overall,
-            "earnings_by_province": results,
         }
 
         if province:
             response_content["province"] = province
-            if results:
-                response_content["earnings_by_province"] = results[0]
-            else:
-                response_content["earnings_by_province"] = {
-                    "province": province,
-                    "total_earned": 0,
-                    "total_tickets": 0,
-                }
 
-        await self.redis_client.set(cache_key, dumps(response_content), expire=300)
+        await self.redis_client.set(cache_key, dumps(response_content), expire=3600)
         return response_content
 
-    async def create_monthly_payments(self, payment_data: CreatePaymentForMonthsSchema):
+    async def create_monthly_payments(
+        self,
+        payment_data: CreatePaymentForMonthsSchema,
+    ):
         try:
             user_id = payment_data.user_id
             months_and_amounts = payment_data.months_and_amounts
@@ -338,11 +237,6 @@ class PaymentService(MongoDBService):
                             create_operations, session=session
                         )
 
-                        for (year, month), amount in balance_updates.items():
-                            await self.update_monthly_balance(
-                                year, month, province, amount, session
-                            )
-
                     await self._handle_next_month_ticket(
                         user_id,
                         year,
@@ -353,10 +247,16 @@ class PaymentService(MongoDBService):
                         session,
                     )
 
-            # Invalidate relevant caches
-            await self.invalidate_multiple_caches(
-                user_id, year, sorted_months, province
-            )
+            for (year, month), amount in balance_updates.items():
+                update_monthly_balance.delay(
+                    year=year, month=month, province=province, amount_change=amount
+                )
+
+            cache_keys = [
+                f"user_data_by_year:{user_id}:{year}",
+                f"total_earned_{year}_{province}",
+            ]
+            invalidate_caches.delay(cache_keys)
 
             return {
                 "status": "success",
@@ -375,81 +275,69 @@ class PaymentService(MongoDBService):
 
     async def update_monthly_payments(self, payment_updates: PaymentUpdateList):
         try:
-            client = self.collection.database.client
-            async with await client.start_session() as session:
-                async with session.start_transaction():
-                    update_operations = []
-                    balance_updates = {}
+            update_operations = []
+            balance_updates = {}
+            cache_keys = set()
 
-                    for update in payment_updates.payments:
-                        existing_payment = await self.collection.find_one(
-                            {"_id": ObjectId(update.id)}, session=session
-                        )
-                        if not existing_payment:
-                            raise HTTPException(
-                                status_code=404,
-                                detail=f"Payment with id {ObjectId(update.id)} not found",
-                            )
+            for update in payment_updates.payments:
+                new_paid_amount = update.paid_amount
+                new_remaining_amount = payment_updates.default_amount - new_paid_amount
+                new_status = self._determine_status(
+                    new_paid_amount, payment_updates.default_amount
+                )
 
-                        old_paid_amount = existing_payment.get("paid_amount", 0)
-                        new_paid_amount = update.paid_amount
-                        amount_change = new_paid_amount - old_paid_amount
+                update_data = {
+                    "$set": {
+                        "paid_amount": new_paid_amount,
+                        "remaining_amount": new_remaining_amount,
+                        "status": new_status,
+                        "updated_at": datetime.utcnow(),
+                    }
+                }
 
-                        update_data = {
-                            "paid_amount": new_paid_amount,
-                            "remaining_amount": existing_payment["amount"]
-                            - new_paid_amount,
-                            "status": self._determine_status(
-                                new_paid_amount, existing_payment["amount"]
-                            ),
-                            "updated_at": datetime.utcnow(),
-                        }
-                        if update.payment_with:
-                            update_data["payment_with"] = update.payment_with.value
+                if update.payment_with:
+                    update_data["$set"]["payment_with"] = update.payment_with
 
-                        update_operations.append(
-                            UpdateOne(
-                                {"_id": ObjectId(update.id)}, {"$set": update_data}
-                            )
-                        )
+                update_operations.append(
+                    UpdateOne({"_id": ObjectId(update.id)}, update_data)
+                )
 
-                        year = existing_payment["year"]
-                        month = existing_payment["month"]
-                        province = existing_payment["province"]
+                balance_key = (
+                    payment_updates.year,
+                    update.month,
+                    payment_updates.province,
+                )
+                balance_updates[balance_key] = (
+                    balance_updates.get(balance_key, 0) + new_paid_amount
+                )
 
-                        balance_key = (year, month, province)
-                        if balance_key not in balance_updates:
-                            balance_updates[balance_key] = 0
-                        balance_updates[balance_key] += amount_change
+                cache_keys.add(
+                    f"user_data_by_year:{payment_updates.user_id}:{payment_updates.year}"
+                )
+                cache_keys.add(
+                    f"total_earned_{payment_updates.year}_{payment_updates.province}"
+                )
 
-                    if update_operations:
-                        result = await self.collection.bulk_write(
-                            update_operations, session=session
-                        )
+            if update_operations:
+                result = await self.collection.bulk_write(update_operations)
 
-                        for (
-                            year,
-                            month,
-                            province,
-                        ), amount_change in balance_updates.items():
-                            await self.update_monthly_balance(
-                                year, month, province, amount_change, session
-                            )
-
-                    await self.invalidate_multiple_caches_for_updates(
-                        payment_updates.payments
+                if result.modified_count != len(update_operations):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Some updates failed. Expected {len(update_operations)} updates, but only {result.modified_count} succeeded.",
                     )
 
-                    return {
-                        "status": "success",
-                        "message": f"Updated {len(update_operations)} payments",
-                        "modified_count": result.modified_count if result else 0,
-                    }
+                for (year, month, province), amount_change in balance_updates.items():
+                    update_monthly_balance.delay(year, month, province, amount_change)
 
-        except ValueError as ve:
-            raise HTTPException(status_code=400, detail=str(ve))
-        except HTTPException:
-            raise
+            invalidate_caches.delay(list(cache_keys))
+
+            return {
+                "status": "success",
+                "message": f"Updated {result.modified_count} payments",
+                "modified_count": result.modified_count,
+            }
+
         except Exception as e:
             raise HTTPException(
                 status_code=500, detail=f"An unexpected error occurred: {str(e)}"
@@ -514,225 +402,150 @@ class PaymentService(MongoDBService):
         )
         created_payment = await self.create(payment_data.dict(exclude_unset=True))
 
-        # Invalidate relevant caches
-        await self.redis_client.delete(f"monthly_revenue_{now.month}_{now.year}")
-        await self.redis_client.delete(f"annual_revenue_{now.year}")
-        await self.redis_client.delete(
-            f"revenue_by_month_range_{now.year}_{now.month}_{now.month}"
-        )
-        await self.redis_client.delete(
-            f"user_data_by_year_{created_lesson['player_id']}_{now.year}"
-        )
-        await self.redis_client.delete(f"expected_yearly_revenue_{province}")
-        await self.redis_client.delete(f"total_earned_{now.year}_{province}")
+        cache_keys = [
+            f"user_data_by_year_{created_lesson['player_id']}_{now.year}",
+            f"total_earned_{now.year}_{province}",
+        ]
+        invalidate_caches.delay(cache_keys)
 
         return created_payment
 
     async def update_payment(self, payment_id: str, update_data: dict):
-        old_payment = await self.collection.find_one({"_id": ObjectId(payment_id)})
-        if not old_payment:
-            raise HTTPException(status_code=404, detail="Payment not found")
+        try:
+            # Define allowed fields for update
+            allowed_fields = [
+                "amount",
+                "due_date",
+                "status",
+                "province",
+                "paid_amount",
+                "payment_with",
+            ]
 
-        update_fields = {}
-        allowed_fields = ["amount", "due_date", "status", "province", "paid_amount"]
-        for field in allowed_fields:
-            if field in update_data:
-                update_fields[field] = update_data[field]
+            # Filter update_data to only include allowed fields
+            update_fields = {
+                k: v for k, v in update_data.items() if k in allowed_fields
+            }
+            update_fields["status"] = self._determine_status(
+                update_data["paid_amount"], update_data["amount"]
+            )
+            update_fields["remaining_amount"] = (
+                update_fields["amount"] - update_fields["paid_amount"]
+            )
+            update_fields["updated_at"] = datetime.utcnow()
+            if not update_fields:
+                raise HTTPException(status_code=400, detail="No valid fields to update")
 
-        if not update_fields:
-            raise HTTPException(status_code=400, detail="No valid fields to update")
+            # Perform the update
+            result = await self.collection.find_one_and_update(
+                {"_id": ObjectId(payment_id)},
+                {"$set": update_fields},
+                return_document=True,
+            )
 
-        old_paid_amount = old_payment.get("paid_amount", 0)
-        new_paid_amount = update_fields.get("paid_amount", old_paid_amount)
-
-        if "status" in update_fields:
-            if update_fields["status"] == Status.PENDING:
-                new_paid_amount = 0
-            elif (
-                old_payment["status"] == Status.PENDING
-                and update_fields["status"] != Status.PENDING
-            ):
-                new_paid_amount = update_fields.get(
-                    "paid_amount", old_payment["amount"]
+            if not result:
+                raise HTTPException(
+                    status_code=404, detail="Payment not found or update failed"
                 )
 
-        amount_change = new_paid_amount - old_paid_amount
-        update_fields["paid_amount"] = new_paid_amount
+            # Trigger cache invalidation
+            cache_keys = [
+                f"user_data_by_year_{result['user_id']}_{result['year']}",
+                f"total_earned_{result['year']}_{result['province']}",
+            ]
+            invalidate_caches.delay(cache_keys)
 
-        result = await self.collection.find_one_and_update(
-            {"_id": ObjectId(payment_id)},
-            {"$set": update_fields},
-            return_document=True,
-        )
+            return result
 
-        if not result:
-            raise HTTPException(status_code=400, detail="Update failed")
-
-        if amount_change != 0:
-            await self.update_monthly_balance(
-                result["year"], result["month"], result["province"], amount_change
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, detail=f"An unexpected error occurred: {str(e)}"
             )
-
-        if "status" in update_fields:
-            await self._handle_payment_status_change(old_payment, result)
-
-        # Invalidate relevant caches
-        await self.redis_client.delete(
-            f"monthly_revenue_{result['month']}_{result['year']}"
-        )
-        await self.redis_client.delete(f"annual_revenue_{result['year']}")
-        await self.redis_client.delete(
-            f"revenue_by_month_range_{result['year']}_{result['month']}_{result['month']}"
-        )
-        await self.redis_client.delete(
-            f"user_data_by_year_{result['user_id']}_{result['year']}"
-        )
-        await self.redis_client.delete(f"expected_yearly_revenue_{result['province']}")
-        await self.redis_client.delete(
-            f"total_earned_{result['year']}_{result['province']}"
-        )
-
-        return result
 
     async def delete_payment(self, payment_id: str):
-        payment = await self.collection.find_one({"_id": ObjectId(payment_id)})
-        if not payment:
-            raise HTTPException(status_code=404, detail="Payment not found")
+        try:
+            now = datetime.utcnow()
+            result = await self.collection.delete_one({"_id": ObjectId(payment_id)})
+            print(result.deleted_count)
+            if result.deleted_count > 0:
 
-        result = await self.collection.delete_one({"_id": ObjectId(payment_id)})
-
-        if result.deleted_count == 0:
-            raise HTTPException(status_code=400, detail="Deletion failed")
-
-        await self._handle_next_month_ticket(payment, is_deletion=True)
-
-        # Invalidate relevant caches
-        await self.redis_client.delete(
-            f"monthly_revenue_{payment['month']}_{payment['year']}"
-        )
-        await self.redis_client.delete(f"annual_revenue_{payment['year']}")
-        await self.redis_client.delete(
-            f"revenue_by_month_range_{payment['year']}_{payment['month']}_{payment['month']}"
-        )
-        await self.redis_client.delete(
-            f"user_data_by_year_{payment['user_id']}_{payment['year']}"
-        )
-        await self.redis_client.delete(f"expected_yearly_revenue_{payment['province']}")
-        await self.redis_client.delete(
-            f"total_earned_{payment['year']}_{payment['province']}"
-        )
-
-        return {"status": "success", "message": "Payment deleted successfully"}
-
-    async def _handle_payment_status_change(self, old_payment: dict, new_payment: dict):
-        if (
-            old_payment["status"] != Status.PAID
-            and new_payment["status"] == Status.PAID
-        ):
-            await self._handle_next_month_ticket(new_payment, create_next=True)
-        elif (
-            old_payment["status"] == Status.PAID
-            and new_payment["status"] != Status.PAID
-        ):
-            await self._handle_next_month_ticket(new_payment, delete_next=True)
-
-    async def make_single_payment(self, payment: Payment):
-        payment_dict = payment.dict()
-        if "_id" in payment_dict:
-            payment_id = payment_dict.pop("_id")
-            if not ObjectId.is_valid(payment_id):
-                raise ValueError("Invalid _id format")
-
-            payment_dict["updated_at"] = datetime.utcnow()
-
-            existing_payment = await self.collection.find_one(
-                {"_id": ObjectId(payment_id)}
-            )
-            if not existing_payment:
-                raise ValueError(f"No payment found with id {payment_id}")
-
-            amount_change = payment_dict.get("paid_amount", 0) - existing_payment.get(
-                "paid_amount", 0
+                return {"status": "success", "message": "Payment deleted successfully"}
+            elif result.deleted_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Payment not found",
+                )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"An error occurred while deleting payment: {str(e)}",
             )
 
-            result = await self.collection.update_one(
-                {"_id": ObjectId(payment_id)}, {"$set": payment_dict}
+    async def make_single_payment(self, payment: SinglePayment):
+        try:
+            payment_dict = payment.dict()
+            current_time = datetime.utcnow()
+
+            # Update payment dictionary with calculated fields
+            payment_dict.update(
+                {
+                    "paid_date": (
+                        current_time if payment_dict["paid_amount"] > 0 else None
+                    ),
+                    "created_at": current_time,
+                    "updated_at": current_time,
+                    "remaining_amount": max(
+                        0, payment_dict["amount"] - payment_dict["paid_amount"]
+                    ),
+                    "status": self._determine_status(
+                        payment_dict["paid_amount"], payment_dict["amount"]
+                    ),
+                }
             )
 
-            if result.modified_count == 0:
-                raise ValueError(f"Failed to update payment with id {payment_id}")
-
-            await self.update_monthly_balance(
-                payment.year, payment.month, payment.province, amount_change
-            )
-
-            updated_payment = await self.collection.find_one(
-                {"_id": ObjectId(payment_id)}
-            )
-            payment_result = Payment(**updated_payment)
-        else:
-            payment_dict["created_at"] = datetime.utcnow()
-            payment_dict["updated_at"] = payment_dict["created_at"]
-
+            # Insert the payment into the database
             result = await self.collection.insert_one(payment_dict)
 
-            await self.update_monthly_balance(
-                payment.year, payment.month, payment.province, payment.paid_amount
+            if not result.inserted_id:
+                raise HTTPException(status_code=400, detail="Failed to insert payment")
+
+            # Trigger balance update
+            update_monthly_balance.delay(
+                payment_dict["year"],
+                payment_dict["month"],
+                payment_dict["province"],
+                payment_dict["paid_amount"],
             )
 
-            created_payment = await self.collection.find_one(
-                {"_id": result.inserted_id}
+            # Invalidate relevant caches
+            cache_keys = [
+                f"user_data_by_year:{payment_dict['user_id']}:{payment_dict['year']}",
+                f"total_earned_{payment_dict['year']}_{payment_dict['province']}",
+            ]
+            invalidate_caches.delay(cache_keys)
+
+            return {
+                "status": "success",
+                "message": "Payment created successfully",
+                "payment_id": str(result.inserted_id),
+            }
+
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, detail=f"An unexpected error occurred: {str(e)}"
             )
-            payment_result = Payment(**created_payment)
-
-        # Invalidate relevant caches
-        await self.redis_client.delete(
-            f"monthly_revenue_{payment.month}_{payment.year}"
-        )
-        await self.redis_client.delete(f"annual_revenue_{payment.year}")
-        await self.redis_client.delete(
-            f"revenue_by_month_range_{payment.year}_{payment.month}_{payment.month}"
-        )
-        await self.redis_client.delete(
-            f"user_data_by_year_{payment.user_id}_{payment.year}"
-        )
-        await self.redis_client.delete(f"expected_yearly_revenue_{payment.province}")
-        await self.redis_client.delete(
-            f"total_earned_{payment.year}_{payment.province}"
-        )
-
-        return payment_result
 
     async def enter_expenses(self, expense_payment: Payment):
         try:
-            client = self.collection.database.client
-            async with await client.start_session() as session:
-                async with session.start_transaction():
-                    created_expense = await self.create(
-                        expense_payment.dict(exclude_unset=True)
-                    )
+            created_expense = await self.create(
+                expense_payment.dict(exclude_unset=True)
+            )
 
-                    await self.update_monthly_balance(
-                        expense_payment.year,
-                        expense_payment.month,
-                        expense_payment.province,
-                        -abs(expense_payment.amount),
-                        session,
-                    )
-
-            # Invalidate relevant caches
-            await self.redis_client.delete(
-                f"monthly_revenue_{expense_payment.month}_{expense_payment.year}"
-            )
-            await self.redis_client.delete(f"annual_revenue_{expense_payment.year}")
-            await self.redis_client.delete(
-                f"revenue_by_month_range_{expense_payment.year}_{expense_payment.month}_{expense_payment.month}"
-            )
-            await self.redis_client.delete(
-                f"expected_yearly_revenue_{expense_payment.province}"
-            )
-            await self.redis_client.delete(
-                f"total_earned_{expense_payment.year}_{expense_payment.province}"
+            update_monthly_balance.delay(
+                expense_payment.year,
+                expense_payment.month,
+                expense_payment.province,
+                -abs(expense_payment.amount),
             )
 
             return Payment(**created_expense)
@@ -743,32 +556,3 @@ class PaymentService(MongoDBService):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"An error occurred while entering the expense: {str(e)}",
             )
-
-    async def invalidate_multiple_caches(self, user_id, year, months, province):
-        cache_keys = [f"monthly_revenue:{year}:{month}" for month in months] + [
-            f"annual_revenue:{year}",
-            f"revenue_by_month_range:{year}:{min(months)}:{max(months)}",
-            f"user_data_by_year:{user_id}:{year}",
-            f"expected_yearly_revenue:{province}",
-            f"total_earned:{year}:{province}",
-        ]
-        await self.redis_client.delete(*cache_keys)
-
-    async def invalidate_multiple_caches_for_updates(self, payment_updates):
-        cache_keys = set()
-        for update in payment_updates:
-            existing_payment = await self.collection.find_one(
-                {"_id": ObjectId(update.id)}
-            )
-            if existing_payment:
-                cache_keys.update(
-                    [
-                        f"monthly_revenue:{existing_payment['year']}:{existing_payment['month']}",
-                        f"annual_revenue:{existing_payment['year']}",
-                        f"revenue_by_month_range:{existing_payment['year']}:{existing_payment['month']}:{existing_payment['month']}",
-                        f"user_data_by_year:{existing_payment['user_id']}:{existing_payment['year']}",
-                        f"expected_yearly_revenue:{existing_payment['province']}",
-                        f"total_earned:{existing_payment['year']}:{existing_payment['province']}",
-                    ]
-                )
-        await self.redis_client.delete(*cache_keys)

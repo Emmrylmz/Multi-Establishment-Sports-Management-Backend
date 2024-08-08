@@ -16,11 +16,7 @@ class ConstantUpdate(BaseModel):
 
 class ConstantResponse(BaseModel):
     id: str
-    key: str
-    value: float
-    description: str
-    created_at: datetime
-    updated_at: Optional[datetime]
+    status: str
 
 
 class ConstantAmountGetResponse(BaseModel):

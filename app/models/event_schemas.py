@@ -63,6 +63,8 @@ class CreateEventSchema(BaseModel):
 
 
 class ListTeamEventSchema(BaseModel):
+    page: int
+    events_per_page: Optional[int]
     team_ids: List[str]
 
 

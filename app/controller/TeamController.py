@@ -46,7 +46,7 @@ class TeamController:
         user_id: dict,
     ):
         app = request.app
-        user = await self.auth_service.validate_role(user_id, UserRole.COACH)
+        user = await self.auth_service.validate_role(user_id, UserRole.COACH.value)
         team_data = team_payload.dict()
 
         # Create the team
@@ -60,16 +60,14 @@ class TeamController:
         team_id = created_team["_id"]
 
         # Declare and bind queue
-        await app.rabbit_client.create_team_queue(str(team_id))
 
         # Get the province of the created team
         province = team_data.get("province")
 
         # Fetch all managers in the same province
-        managers_cursor = await self.auth_service.get_users_by_role_and_province(
+        managers = await self.auth_service.get_users_by_role_and_province(
             "Manager", province
         )
-        managers = await managers_cursor.to_list(length=None)
 
         # Update each manager's team_ids array
         for manager in managers:
@@ -82,13 +80,15 @@ class TeamController:
         return created_team
 
     async def add_user_to_team(self, team_ids, user_ids):
-        user_ids = [ObjectId(user_id) for user_id in user_ids]
-        team_ids = [ObjectId(team_id) for team_id in team_ids]
-        role = await self.auth_service.check_role(user_id=user_ids[0])
+        object_team_ids = [ObjectId(team_id) for team_id in team_ids]
+        object_user_ids = [ObjectId(user_id) for user_id in user_ids]
+
+        role = await self.auth_service.check_role(user_id=object_user_ids[0])
         user_role_field = "team_players" if role == UserRole.PLAYER else "team_coaches"
+
         user_response = await self.team_service.add_users_to_teams(
-            team_ids=team_ids,
-            user_ids=user_ids,
+            team_ids=object_team_ids,
+            user_ids=object_user_ids,
             user_role_field=user_role_field,
             register=False,
         )
@@ -109,19 +109,16 @@ class TeamController:
 
     async def get_team_coaches(self, team_ids: List[str]):
         try:
-            # Convert team_ids to ObjectId
-            team_object_ids = [ObjectId(team_id) for team_id in team_ids]
 
             # Aggregation pipeline to fetch teams and their coaches
-            result = await self.team_service.get_team_coaches(team_object_ids)
+            result = await self.team_service.get_team_coaches(team_ids)
             if not result:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="No coaches found for the given teams",
                 )
 
-            coaches = result[0]["team_coaches"]
-            return coaches
+            return result
 
         except Exception as e:
             raise HTTPException(

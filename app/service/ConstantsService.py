@@ -29,7 +29,7 @@ class ConstantsService(MongoDBService):
     async def __init__(self, database: AsyncIOMotorDatabase, redis_client: RedisClient):
         self.database = database
         self.redis_client = redis_client
-        self.collection = await get_collection("Constants", database)
+        self.collection = await get_collection("Constant", database)
         await super().__init__(self.collection)
 
     async def create_constant(self, constant: ConstantCreate) -> ConstantResponse:
@@ -40,10 +40,12 @@ class ConstantsService(MongoDBService):
         result = await self.collection.insert_one(constant_dict)
 
         if result.inserted_id:
-            created_constant = await self.collection.find_one(
-                {"_id": result.inserted_id}
+
+            return ConstantResponse(
+                id=str(result.inserted_id),
+                status="success" if result.inserted_id else "failed",
+                **constant_dict
             )
-            return ConstantResponse(id=str(created_constant["_id"]), **created_constant)
         else:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -56,33 +58,29 @@ class ConstantsService(MongoDBService):
         now = datetime.utcnow()
         update_data = constant.dict()
         update_data["updated_at"] = now
-
         result = await self.collection.update_one(
             {"_id": ObjectId(constant_id)}, {"$set": update_data}
         )
-
         if result.modified_count:
-            updated_constant = await self.collection.find_one(
-                {"_id": ObjectId(constant_id)}
+
+            return ConstantResponse(
+                id=str(constant_id),
+                status="success" if result.modified_count > 0 else "failed",
             )
-            return ConstantResponse(id=str(updated_constant["_id"]), **updated_constant)
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Constant not found"
             )
 
-    async def get_all_constants(self) -> List[ConstantResponse]:
+    async def get_all_constants(self) -> List[ConstantCreate]:
         cursor = self.collection.find()
         constants = await cursor.to_list(length=None)
-        return [
-            ConstantResponse(id=str(constant["_id"]), **constant)
-            for constant in constants
-        ]
+        return [ConstantCreate(**constant) for constant in constants]
 
-    async def get_constant(self, constant_id: str) -> ConstantResponse:
+    async def get_constant(self, constant_id: str) -> ConstantCreate:
         constant = await self.collection.find_one({"_id": ObjectId(constant_id)})
         if constant:
-            return ConstantResponse(id=str(constant["_id"]), **constant)
+            return ConstantCreate(**constant)
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Constant not found"

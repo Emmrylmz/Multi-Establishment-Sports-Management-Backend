@@ -107,42 +107,45 @@ class AuthService(MongoDBService):
         await self.collection.update_one(
             {"_id": ObjectId(user_id)}, {"$set": {"teams": team_ids}}
         )
-        await self.invalidate_user_cache(user_id)
+        invalidate_caches.delay(f"user:id:{user_id}")
 
-    async def delete_user(self, user: Dict[str, Any]) -> Dict[str, Any]:
-        response_insert = await self.deleted_user_collection.insert_one(user)
+    async def delete_user(self, user: Dict[str, Any], session) -> Dict[str, Any]:
+
+        response_insert = await self.deleted_user_collection.insert_one(
+            user, session=session
+        )
         user_id = user["_id"]
 
-        response_delete = await self.collection.delete_one({"_id": ObjectId(user_id)})
+        response_delete = await self.collection.delete_one(
+            {"_id": ObjectId(user_id)}, session=session
+        )
 
         if response_delete.deleted_count == 0:
             raise HTTPException(status_code=500, detail="Failed to delete user")
 
-        await self.invalidate_user_cache(str(user_id))
+        invalidate_caches.delay(f"user:id:{user_id}")
 
         return {
             "deleted_count": response_delete.deleted_count,
             "inserted_id": str(response_insert.inserted_id),
         }
 
-    async def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+    async def get_user_by_id(
+        self, user_id: str, session=None
+    ) -> Optional[Dict[str, Any]]:
         cache_key = f"user:id:{user_id}"
         cached_user = await self.redis_client.get(cache_key)
         if cached_user:
             return loads(cached_user)
 
-        user = await self.get_by_id(ObjectId(user_id))
+        user = await self.collection.find_one(
+            {"_id": ObjectId(user_id)}, session=session
+        )
         if user:
             await self.redis_client.set(
-                cache_key, dumps(user), expire=3600
+                cache_key, dumps(user), expire=300
             )  # Cache for 1 hour
         return user
-
-    async def invalidate_user_cache(self, user_id: str):
-        user = await self.get_by_id(ObjectId(user_id))
-        if user:
-            await self.redis_client.delete(f"user:id:{user_id}")
-            await self.redis_client.delete(f"user:{user['email'].lower()}")
 
 
 # @staticmethod

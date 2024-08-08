@@ -72,9 +72,10 @@ class EventController:
         # Add the user's ID to the event data as the creator
         event_data = event.dict()
         event_data["creator_name"] = user["name"]
-        event_data["team_id"] = ObjectId(event_data["team_id"])
+        event_data["team_id"] = event_data["team_id"]
         # Call to your service layer to save the event asynchronously
         created_event = await self.event_service.create(event_data)
+        print("created_event", created_event)
         if not created_event:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -95,13 +96,18 @@ class EventController:
         return event
 
     async def update_event(self, event_id: str, event: UpdateEventSchema):
-        # update
-        data_id = ObjectId(event_id)
+        try:
+            data_id = ObjectId(event_id)
+        except:
+            raise HTTPException(status_code=400, detail="Invalid event ID")
+
         updated_event = await self.event_service.update(
-            data_id, event.dict(exclude_unset=True)
+            str(data_id), event.dict(exclude_unset=True)
         )
-        if not updated_event:
+
+        if updated_event is None:
             raise HTTPException(status_code=404, detail="Event not found")
+
         return EventResponseSchema(event_id=event_id, status="changed")
 
     async def delete_event(self, event_id: str):
@@ -125,7 +131,9 @@ class EventController:
         response = ListEventResponseSchema(team_name=team["team_name"], events=events)
         return response
 
-    async def get_team_events(self, team_ids: List[str]) -> List[Dict[str, Any]]:
+    async def get_team_events(
+        self, team_ids: List[str], page: int
+    ) -> List[Dict[str, Any]]:
         logging.debug(f"get_team_events called with team_ids: {team_ids}")
 
         # Validate and convert team_ids to ObjectIds
@@ -135,7 +143,9 @@ class EventController:
             logging.error(f"Error converting team_ids to ObjectId: {e}")
             raise HTTPException(status_code=400, detail=f"Invalid team_id format: {e}")
 
-        return await self.event_service.get_all_events_by_team_id(team_object_ids)
+        return await self.event_service.get_all_events_by_team_id(
+            team_object_ids, page=page
+        )
 
     async def list_events(self, team_id: str):
         logging.debug(
@@ -158,10 +168,9 @@ class EventController:
         attendances = attendance_form.attendances
 
         try:
-            await self.event_service.add_attendance(
+            result = await self.event_service.add_attendance(
                 event_id=event_id, attendances=attendances
             )
-
         except Exception as e:
             raise HTTPException(
                 status_code=500,

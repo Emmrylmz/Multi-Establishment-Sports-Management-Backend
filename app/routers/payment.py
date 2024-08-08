@@ -3,14 +3,12 @@ from ..rabbit_client.client import RabbitClient
 from ..models.payment_schemas import (
     Payment,
     SingleUserPayment,
-    MonthlyRevenuePayloadSchema,
-    YearlyRevenuePayloadSchema,
-    RevenueByMonthRangePayloadSchema,
     PrivateLessonResponseSchema,
     CreatePaymentForMonthsSchema,
     PaymentUpdateSchema,
     PaymentUpdateList,
     ExpenseCreate,
+    SinglePayment,
 )
 from typing import List, Optional
 from ..oauth2 import require_user
@@ -23,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.post("/create_payment_for_months", status_code=status.HTTP_201_CREATED)
-async def pay_user_payment(
+async def create_payment_for_months(
     payment: CreatePaymentForMonthsSchema,
     payment_controller: PaymentController = Depends(get_payment_controller),
 ):
@@ -36,7 +34,7 @@ async def pay_user_payment(
 
 
 @router.post("/update_payment_for_months", status_code=status.HTTP_201_CREATED)
-async def pay_user_payment(
+async def update_payment_for_months(
     payment: PaymentUpdateList,
     payment_controller: PaymentController = Depends(get_payment_controller),
 ):
@@ -76,18 +74,18 @@ async def get_user_data_by_year(
 
 @router.post("/make_single_payment")
 async def make_single_payment(
-    payment: Payment,
+    payment: SinglePayment,
     payment_controller: PaymentController = Depends(get_payment_controller),
 ):
     return await payment_controller.make_single_payment(payment)
 
 
-@router.get("/get_team_payments/{team_id}")
-async def get_team_payments(
-    team_id: str,
-    payment_controller: PaymentController = Depends(get_payment_controller),
-):
-    return await payment_controller.get_team_payments(team_id)
+# @router.get("/get_team_payments/{team_id}")
+# async def get_team_payments(
+#     team_id: str,
+#     payment_controller: PaymentController = Depends(get_payment_controller),
+# ):
+#     return await payment_controller.get_team_payments(team_id)
 
 
 @router.get("/expected_revenue", status_code=status.HTTP_200_OK)

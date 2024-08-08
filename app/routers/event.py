@@ -56,7 +56,7 @@ async def delete_event(
     return await event_controller.delete_event(event_id)
 
 
-@router.post(
+@router.put(
     "/update/{event_id}",
     response_model=EventResponseSchema,
     status_code=status.HTTP_200_OK,
@@ -71,11 +71,11 @@ async def update_event(
 
 @router.post("/get_team_events", status_code=status.HTTP_200_OK)
 async def fetch_team_events(
-    team_ids: ListTeamEventSchema,
-    user_id: str = Depends(require_user),
+    payload: ListTeamEventSchema,
+    # user_id: str = Depends(require_user),
     event_controller: EventController = Depends(get_event_controller),
 ):
-    return await event_controller.get_team_events(team_ids.team_ids)
+    return await event_controller.get_team_events(payload.team_ids, payload.page)
 
 
 @router.post("/add_attendances_to_event", status_code=status.HTTP_201_CREATED)

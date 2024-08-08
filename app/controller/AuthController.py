@@ -163,7 +163,7 @@ class AuthController:
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Could not refresh access token",
                 )
-            user = await self.auth_service.get_user_by_id(user_id)
+            user = await self.auth_service.get_by_id(user_id)
             if not user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
@@ -247,17 +247,28 @@ class AuthController:
             raise HTTPException(
                 status_code=400, detail=f"Invalid user ID format: {str(e)}"
             )
-        try:
-            # Check if the user exists
-            user = await self.auth_service.get_by_id(user_id_obj)
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found")
-            deleted_user = await self.auth_service.delete_user(user)
-            deleted_team = await self.team_service.remove_user_from_teams(
-                user_id_obj, user["teams"]
-            )
-            return {"deleted_user": deleted_user, "deleted_team": deleted_team}
-        except HTTPException as e:
-            raise e
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+        client = self.auth_service.collection.database.client
+        async with await client.start_session() as session:
+            async with session.start_transaction():
+                try:
+                    # Check if the user exists
+                    user = await self.auth_service.get_user_by_id(
+                        user_id_obj, session=session
+                    )
+                    if not user:
+                        raise HTTPException(status_code=404, detail="User not found")
+
+                    deleted_user = await self.auth_service.delete_user(
+                        user, session=session
+                    )
+                    deleted_team = await self.team_service.remove_user_from_teams(
+                        user_id_obj, user["teams"], session=session
+                    )
+                    return {"deleted_user": deleted_user, "deleted_team": deleted_team}
+                except HTTPException as e:
+                    raise e
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=500, detail=f"An error occurred: {str(e)}"
+                    )

@@ -40,9 +40,7 @@ class PushTokenService(MongoDBService):
                 success = result.inserted_id is not None
 
             if success:
-                await self.invalidate_user_token_cache(user_id)
-                await self.invalidate_all_tokens_cache()
-                await self.invalidate_province_tokens_cache(data.get("province"))
+                invalidate_caches.delay(["all_user_tokens", f"user_token:{user_id}"])
             return success
         except Exception as e:
             logging.error(f"Error saving token: {e}")
@@ -55,18 +53,33 @@ class PushTokenService(MongoDBService):
             return cached_tokens
 
         try:
-            team = await self.team_collection.find_one({"_id": ObjectId(team_id)})
-            if team:
-                players_ids = team.get("team_players", [])
-                object_ids = [ObjectId(id) for id in players_ids]
-                query = {"_id": {"$in": object_ids}}
-                documents = await self.collection.find(query, {"token": 1}).to_list(
-                    None
-                )
-                tokens = [
-                    player.get("token") for player in documents if player.get("token")
-                ]
+            pipeline = [
+                {"$match": {"_id": ObjectId(team_id)}},
+                {
+                    "$lookup": {
+                        "from": "Push_Token",  # Assuming the players collection name
+                        "localField": "team_players",
+                        "foreignField": "_id",
+                        "as": "players",
+                    }
+                },
+                {
+                    "$project": {
+                        "tokens": {
+                            "$filter": {
+                                "input": "$players.token",
+                                "as": "token",
+                                "cond": {"$ne": ["$$token", None]},
+                            }
+                        }
+                    }
+                },
+            ]
 
+            result = await self.team_collection.aggregate(pipeline).to_list(1)
+
+            if result:
+                tokens = result[0].get("tokens", [])
                 await self.redis_client.set(
                     cache_key, tokens, expire=3600
                 )  # Cache for 1 hour
@@ -139,16 +152,3 @@ class PushTokenService(MongoDBService):
         except Exception as e:
             logging.error(f"Error getting province user tokens: {e}")
             return []
-
-    async def invalidate_user_token_cache(self, user_id: str):
-        await self.redis_client.delete(f"user_token:{user_id}")
-
-    async def invalidate_all_tokens_cache(self):
-        await self.redis_client.delete("all_user_tokens")
-
-    async def invalidate_province_tokens_cache(self, province: str):
-        if province:
-            await self.redis_client.delete(f"province_user_tokens:{province}")
-
-    async def invalidate_team_player_tokens_cache(self, team_id: str):
-        await self.redis_client.delete(f"team_player_tokens:{team_id}")

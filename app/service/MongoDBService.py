@@ -17,10 +17,16 @@ class MongoDBService:
 
     async def create(self, data: dict):
         """Creates a new document and stores it in the database asynchronously."""
-        data["created_at"] = datetime.utcnow()  # Uncomment to use timestamps
+        data["created_at"] = datetime.utcnow()
         result = await self.collection.insert_one(data)
-        print(result.inserted_id)
-        return await self.get_by_id(result.inserted_id)
+
+        if result.inserted_id:
+            # Create a new dict with the inserted _id
+            created_data = data.copy()
+            created_data["_id"] = str(result.inserted_id)
+            return created_data
+        else:
+            raise Exception("Failed to create document")
 
     async def get_by_id(self, doc_id: str) -> dict:
         """Retrieves a single document by its ID using an ObjectId asynchronously."""
@@ -34,10 +40,14 @@ class MongoDBService:
     async def update(self, doc_id: str, update_data: dict) -> dict:
         """Updates an existing document asynchronously."""
         update_data["updated_at"] = datetime.utcnow()
-        await self.collection.update_one(
+        result = await self.collection.update_one(
             {"_id": ObjectId(doc_id)}, {"$set": update_data}
         )
-        return await self.get_by_id(doc_id)
+
+        if result.modified_count > 0:
+            return {"_id": doc_id, **update_data}
+        else:
+            return None
 
     async def delete(self, doc_id: str) -> bool:
         """Deletes a document by its ID asynchronously."""

@@ -20,6 +20,12 @@ from ..redis_client import RedisClient
 from ..database import get_database, get_collection
 from bson.json_util import dumps, loads
 from typing import Optional
+from app.celery_app.celery_tasks import invalidate_caches
+from redis.exceptions import RedisError
+import json
+from app.utils import JSONEncoder, logging
+
+logger = logging.getLogger(__name__)
 
 
 class EventService(MongoDBService):
@@ -70,47 +76,37 @@ class EventService(MongoDBService):
     async def get_all_events_by_team_id(
         self,
         team_object_ids: List[ObjectId],
-        skip: int = 0,
-        limit: int = 20,
+        page: int,
+        events_per_page: int = 10,
         fields: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        cache_key = f"all_events_{team_object_ids}_{skip}_{limit}_{fields}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result:
-            return loads(cached_result)
+    ) -> Dict[str, Any]:
+        skip = (page - 1) * events_per_page
 
+        query = {"team_id": {"$in": team_object_ids}}
         projection = {field: 1 for field in fields} if fields else None
-        pipeline = [
-            {"$match": {"team_id": {"$in": team_object_ids}}},
-            {
-                "$lookup": {
-                    "from": "Team",
-                    "localField": "team_id",
-                    "foreignField": "_id",
-                    "as": "team_info",
-                }
-            },
-            {"$unwind": "$team_info"},
-            {
-                "$group": {
-                    "_id": "$team_id",
-                    "team_name": {"$first": "$team_info.team_name"},
-                    "events": {"$push": "$$ROOT"},
-                }
-            },
-            {"$project": {"_id": 0, "team_id": "$_id", "team_name": 1, "events": 1}},
-            {"$skip": skip},
-            {"$limit": limit},
-        ]
 
-        if projection:
-            pipeline.append({"$project": projection})
+        try:
+            total_events = await self.collection.count_documents(query)
+            cursor = self.collection.find(query, projection)
+            cursor.sort("start_datetime", 1).skip(skip).limit(events_per_page)
 
-        results = await self.collection.aggregate(pipeline).to_list(length=None)
-        await self.redis_client.set(cache_key, dumps(results), expire=300)
-        return results
+            events = await cursor.to_list(length=events_per_page)
 
-    async def add_attendance(self, event_id: str, attendances):
+            response = {
+                "events": events,
+                "total_events": total_events,
+                "current_page": page,
+                "total_pages": (total_events + events_per_page - 1) // events_per_page,
+                "events_per_page": events_per_page,
+            }
+
+            serialized_response = json.loads(json.dumps(response, cls=JSONEncoder))
+            return serialized_response
+        except Exception as e:
+            self.logger.error(f"Database error while fetching events: {str(e)}")
+            raise
+
+    async def add_attendance(self, event_id: str, attendances: List[AttendanceRecord]):
         attendance_records = [
             {
                 "event_id": ObjectId(event_id),
@@ -123,8 +119,9 @@ class EventService(MongoDBService):
 
         try:
             result = await self.attendance_collection.insert_many(attendance_records)
-            await self.redis_client.delete(f"attendances_{event_id}")
-            return result.inserted_ids
+            if result.inserted_ids:
+                invalidate_caches.delay([f"attendances_{event_id}"])
+                return result.inserted_ids
         except Exception as e:
             raise HTTPException(
                 status_code=500, detail=f"Failed to insert attendance records: {str(e)}"
@@ -259,7 +256,7 @@ class EventService(MongoDBService):
             result = await self.attendance_collection.bulk_write(bulk_operations)
 
         # Clear cache
-        await self.redis_client.delete(f"attendances_{event_id}")
+        invalidate_caches.delay([f"attendances_{event_id}"])
 
         status = "success" if result and result.modified_count > 0 else "failure"
         # Create and return the EventResponseSchema
@@ -268,11 +265,11 @@ class EventService(MongoDBService):
     async def create_private_lesson(self, lesson_data: dict):
         collection = await self.private_lesson_collection
         result = await collection.insert_one(lesson_data)
-        await self.redis_client.delete(
-            f"private_lesson_{lesson_data['player_id']}_player_id"
-        )
-        await self.redis_client.delete(
-            f"private_lesson_{lesson_data['coach_id']}_coach_id"
+        invalidate_caches.delay(
+            [
+                f"private_lesson_{lesson_request.player_id}_player_id",
+                f"private_lesson_{lesson_request.coach_id}_coach_id",
+            ]
         )
         return await collection.find_one({"_id": result.inserted_id})
 
@@ -287,12 +284,7 @@ class EventService(MongoDBService):
 
         collection = await self.private_lesson_collection
         created_request = await collection.insert_one(lesson_request_data)
-        await self.redis_client.delete(
-            f"private_lesson_{lesson_request.player_id}_player_id"
-        )
-        await self.redis_client.delete(
-            f"private_lesson_{lesson_request.coach_id}_coach_id"
-        )
+
         return created_request.inserted_id
 
     async def approve_private_lesson_request(self, lesson_id: str, update_data: dict):
@@ -308,29 +300,15 @@ class EventService(MongoDBService):
                     detail="No documents were modified. Update failed.",
                 )
 
-            lesson = await collection.find_one({"_id": ObjectId(lesson_id)})
-            if lesson:
-                await self.redis_client.delete(
-                    f"private_lesson_{lesson['player_id']}_player_id"
-                )
-                await self.redis_client.delete(
-                    f"private_lesson_{lesson['coach_id']}_coach_id"
-                )
-
             return updated_request.modified_count
+
         except Exception as e:
             print(f"Error in approve_private_lesson_request: {str(e)}")
             raise e
 
     async def get_private_lesson_by_user_id(self, id: str, field: str):
-        cache_key = f"private_lesson_{id}_{field}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result:
-            return cached_result
-
         collection = await self.private_lesson_collection
         query = {field: id}
         cursor = collection.find(query)
         result = await cursor.to_list(length=None)
-        await self.redis_client.set(cache_key, dumps(result), expire=300)
         return result

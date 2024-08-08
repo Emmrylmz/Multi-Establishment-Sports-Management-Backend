@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 from bson import ObjectId
 from ..oauth2 import require_user
 from ..service import PaymentService, AuthService, UserService
@@ -13,6 +13,7 @@ from ..models.payment_schemas import (
     PaymentUpdateList,
     PaymentUpdateSchema,
     ExpenseCreate,
+    SinglePayment,
 )
 from dateutil.relativedelta import relativedelta
 
@@ -93,7 +94,7 @@ class PaymentController:
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-    async def make_single_payment(self, payment: Payment):
+    async def make_single_payment(self, payment: SinglePayment):
         try:
             result = await self.payment_service.make_single_payment(payment)
             if result:

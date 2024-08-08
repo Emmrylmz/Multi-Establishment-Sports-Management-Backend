@@ -62,23 +62,21 @@ class Payment(BaseModel):
         json_encoders = {ObjectId: str}
 
 
+class SinglePayment(BaseModel):
+    user_id: str
+    amount: float
+    due_date: datetime
+    created_at: datetime = Field(default_factory=datetime.now)
+    month: int
+    year: int
+    province: str
+    paid_amount: float = None
+    payment_with: PaymentWith
+    payment_type: PaymentType
+
+
 class SingleUserPayment(BaseModel):
     user_id: str
-
-
-class MonthlyRevenuePayloadSchema(BaseModel):
-    year: int
-    month: int
-
-
-class YearlyRevenuePayloadSchema(BaseModel):
-    year: int
-
-
-class RevenueByMonthRangePayloadSchema(BaseModel):
-    year: int
-    start_month: Optional[int]
-    end_month: Optional[int]
 
 
 class PrivateLessonResponseSchema(BaseModel):
@@ -99,6 +97,7 @@ class CreatePaymentForMonthsSchema(BaseModel):
 
 
 class PaymentUpdateSchema(BaseModel):
+    amount: Optional[float]
     paid_amount: Optional[float]
     due_date: Optional[datetime]
     status: Optional[Status]
@@ -107,6 +106,7 @@ class PaymentUpdateSchema(BaseModel):
 
 class PaymentUpdateItem(BaseModel):
     id: str = Field(alias="_id")
+    month: int
     paid_amount: float = Field(..., ge=0)
     payment_with: Optional[PaymentWith] = None
 
@@ -117,6 +117,10 @@ class PaymentUpdateItem(BaseModel):
 
 
 class PaymentUpdateList(BaseModel):
+    year: int
+    province: str
+    user_id: str
+    default_amount: float
     payments: List[PaymentUpdateItem]
 
 

@@ -4,6 +4,7 @@ import json
 import datetime
 import logging
 import sys
+from typing import Any
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -20,7 +21,9 @@ class JSONEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, ObjectId):
             return str(o)
-        return json.JSONEncoder.default(self, o)
+        if isinstance(o, datetime.datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 def ensure_object_id(id):
@@ -68,3 +71,35 @@ def setup_logger(name):
     logger.addHandler(f_handler)
 
     return logger
+
+
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
+
+def convert_to_json_serializable(obj: Any) -> Any:
+    logger.debug(f"Converting object of type: {type(obj)}")
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    elif isinstance(obj, dict):
+        return {
+            str(convert_to_json_serializable(key)): convert_to_json_serializable(value)
+            for key, value in obj.items()
+        }
+    elif isinstance(obj, list):
+        return [convert_to_json_serializable(item) for item in obj]
+    elif isinstance(obj, tuple):
+        return tuple(convert_to_json_serializable(item) for item in obj)
+    elif isinstance(obj, set):
+        return {convert_to_json_serializable(item) for item in obj}
+    else:
+        logger.debug(f"Returning object as-is: {obj}")
+        return obj
+
+
+def custom_json_dumps(obj: Any) -> str:
+    import json
+
+    return json.dumps(convert_to_json_serializable(obj))

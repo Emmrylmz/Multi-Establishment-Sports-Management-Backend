@@ -18,22 +18,22 @@ router = APIRouter()
 )
 async def create_constant(
     constant: ConstantCreate,
-    constant_controller: ConstantsController = Depends(get_constants_controller),
+    constants_controller: ConstantsController = Depends(get_constants_controller),
 ):
     return await constants_controller.create_constant(constant)
 
 
-@router.get("/all", response_model=List[ConstantResponse])
+@router.get("/all", response_model=List[ConstantCreate])
 async def get_all_constants(
-    constant_controller: ConstantsController = Depends(get_constants_controller),
+    constants_controller: ConstantsController = Depends(get_constants_controller),
 ):
     return await constants_controller.get_all_constants()
 
 
-@router.get("/get/{constant_id}", response_model=ConstantResponse)
+@router.get("/get/{constant_id}", response_model=ConstantCreate)
 async def get_constant(
     constant_id: str,
-    constant_controller: ConstantsController = Depends(get_constants_controller),
+    constants_controller: ConstantsController = Depends(get_constants_controller),
 ):
     return await constants_controller.get_constant(constant_id)
 
@@ -42,15 +42,15 @@ async def get_constant(
 async def update_constant(
     constant_id: str,
     constant: ConstantUpdate,
-    constant_controller: ConstantsController = Depends(get_constants_controller),
+    constants_controller: ConstantsController = Depends(get_constants_controller),
 ):
     return await constants_controller.update_constant(constant_id, constant)
 
 
-@router.delete("/delete/{constant_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/delete/{constant_id}", status_code=status.HTTP_200_OK)
 async def delete_constant(
     constant_id: str,
-    constant_controller: ConstantsController = Depends(get_constants_controller),
+    constants_controller: ConstantsController = Depends(get_constants_controller),
 ):
     await constants_controller.delete_constant(constant_id)
     return None
@@ -59,6 +59,6 @@ async def delete_constant(
 @router.get("/get/key/{key}", response_model=ConstantAmountGetResponse)
 async def get_constant_by_key(
     key: str,
-    constant_controller: ConstantsController = Depends(get_constants_controller),
+    constants_controller: ConstantsController = Depends(get_constants_controller),
 ):
     return await constants_controller.get_constant_by_key(key)

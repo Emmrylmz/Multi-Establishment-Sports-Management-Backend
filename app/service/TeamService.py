@@ -10,6 +10,8 @@ from aiocache import cached
 from aiocache.serializers import PickleSerializer
 from ..redis_client import RedisClient
 from ..models.user_schemas import UserRole
+from app.celery_app.celery_tasks import invalidate_caches
+import json
 
 
 class TeamService(MongoDBService):
@@ -55,7 +57,12 @@ class TeamService(MongoDBService):
                             and users_update_result.modified_count > 0
                         )
                     ):
-                        await self.invalidate_team_caches(team_ids)
+                        cache_keys = [f"team_users:{tid}" for tid in team_ids] + [
+                            f"teams_by_id:{','.join(map(str, team_ids))}",
+                            "all_teams",
+                            f"team_coaches:{','.join(map(str, team_ids))}",
+                        ]
+                        invalidate_caches.delay(str(team_ids))
                         return {
                             "status": "success",
                             "modified_count_teams": teams_update_result.modified_count,
@@ -97,7 +104,6 @@ class TeamService(MongoDBService):
                                 "name": 1,
                                 "photo": 1,
                                 "discount": 1,
-                                "discount_reason": 1,
                             }
                         },
                     ],
@@ -224,7 +230,7 @@ class TeamService(MongoDBService):
         cache_key = f"team_coaches:{','.join(team_ids)}"
         cached_data = await self.redis_client.get(cache_key)
         if cached_data:
-            return cached_data
+            return json.loads(cached_data)  # Deserialize the cached data
 
         pipeline = [
             {"$match": {"_id": {"$in": [ObjectId(tid) for tid in team_ids]}}},
@@ -255,11 +261,27 @@ class TeamService(MongoDBService):
             },
         ]
 
-        result = await self.collection.aggregate(pipeline).to_list(length=None)
-        if result:
-            await self.redis_client.set(cache_key, result[0], expire=300)
-            return result[0]
-        return {"team_coaches": []}
+        try:
+            result = await self.collection.aggregate(pipeline).to_list(length=None)
+
+            if result and isinstance(result, list) and len(result) > 0:
+                if "team_coaches" in result[0]:
+                    coaches = result[0]["team_coaches"]
+                else:
+                    return []
+            else:
+                return []
+
+            # Serialize coaches to JSON string
+            coaches_json = json.dumps(coaches)
+
+            # Cache the serialized data
+            await self.redis_client.set(cache_key, coaches_json, expire=300)
+
+            return coaches
+        except Exception as e:
+            logging.exception(f"An error occurred while fetching coaches: {str(e)}")
+            return []
 
     async def get_all_coaches_by_province(
         self, province: str, cursor: Optional[str] = None, limit: int = 20
@@ -269,7 +291,7 @@ class TeamService(MongoDBService):
         if cached_data:
             return cached_data
 
-        query = {"role": UserRole.COACH, "province": province}
+        query = {"role": UserRole.COACH.value, "province": province}
         if cursor:
             query["_id"] = {"$gt": ObjectId(cursor)}
 
@@ -295,30 +317,28 @@ class TeamService(MongoDBService):
         await self.redis_client.set(cache_key, result, expire=300)
         return result
 
-    async def remove_user_from_teams(self, user_id, team_ids):
+    async def remove_user_from_teams(self, user_id, team_ids, session):
         team_object_ids = [ObjectId(team_id) for team_id in team_ids]
         try:
             result = await self.collection.update_many(
-                {"_id": {"$in": team_object_ids}}, {"$pull": {"team_players": user_id}}
+                {"_id": {"$in": team_object_ids}},
+                {"$pull": {"team_players": user_id}},
+                session=session,
             )
             if result.modified_count == 0:
                 raise HTTPException(
                     status_code=404,
                     detail="No matching teams found or user not in teams",
                 )
-
-            await self.invalidate_team_caches(team_ids)
+            cache_keys = [f"team_users:{tid}" for tid in team_ids] + [
+                f"teams_by_id:{','.join(map(str, team_ids))}",
+                "all_teams",
+                f"team_coaches:{','.join(map(str, team_ids))}",
+            ]
+            invalidate_caches.delay(team_ids)
             return {"modified_count": result.modified_count}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-    async def invalidate_team_caches(self, team_ids):
-        cache_keys = [f"team_users:{tid}" for tid in team_ids] + [
-            f"teams_by_id:{','.join(map(str, team_ids))}",
-            "all_teams",
-            f"team_coaches:{','.join(map(str, team_ids))}",
-        ]
-        await self.redis_client.delete(*cache_keys)
 
     async def get_unique_provinces(self):
         return await self.collection.distinct("province")
