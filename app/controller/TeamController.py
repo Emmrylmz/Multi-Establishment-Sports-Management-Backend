@@ -79,18 +79,16 @@ class TeamController:
 
         return created_team
 
-    async def add_user_to_team(self, team_ids, user_ids):
+    async def add_user_to_teams(self, team_ids, user_id):
         object_team_ids = [ObjectId(team_id) for team_id in team_ids]
-        object_user_ids = [ObjectId(user_id) for user_id in user_ids]
-
-        role = await self.auth_service.check_role(user_id=object_user_ids[0])
+        user_id = ObjectId(user_id)
+        role = await self.auth_service.check_role(user_id=user_id)
         user_role_field = "team_players" if role == UserRole.PLAYER else "team_coaches"
 
-        user_response = await self.team_service.add_users_to_teams(
+        user_response = await self.team_service.add_user_to_teams(
             team_ids=object_team_ids,
-            user_ids=object_user_ids,
+            user_id=user_id,
             user_role_field=user_role_field,
-            register=False,
         )
         return {
             "results of player/user insertion": {

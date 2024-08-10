@@ -13,6 +13,7 @@ from ..redis_client import RedisClient
 from bson.json_util import dumps, loads
 from typing import List, Optional, Dict, Any
 from ..models.user_schemas import UserRole
+from app.celery_app.celery_tasks import invalidate_caches
 
 
 class AuthService(MongoDBService):

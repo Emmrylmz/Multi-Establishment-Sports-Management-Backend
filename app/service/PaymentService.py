@@ -247,6 +247,8 @@ class PaymentService(MongoDBService):
                         session,
                     )
 
+                await session.commit_transaction()
+
             for (year, month), amount in balance_updates.items():
                 update_monthly_balance.delay(
                     year=year, month=month, province=province, amount_change=amount
@@ -256,8 +258,8 @@ class PaymentService(MongoDBService):
                 f"user_data_by_year:{user_id}:{year}",
                 f"total_earned_{year}_{province}",
             ]
-            invalidate_caches.delay(cache_keys)
 
+            invalidate_caches.delay(cache_keys)
             return {
                 "status": "success",
                 "message": f"Created payments for {len(sorted_months)} months and handled next month's ticket",
@@ -265,10 +267,13 @@ class PaymentService(MongoDBService):
             }
 
         except ValueError as ve:
+            await session.abort_transaction()
             raise HTTPException(status_code=400, detail=str(ve))
         except BulkWriteError as bwe:
+            await session.abort_transaction()
             raise HTTPException(status_code=400, detail="Error processing payments")
         except Exception as e:
+            await session.abort_transaction()
             raise HTTPException(
                 status_code=500, detail=f"An unexpected error occurred: {str(e)}"
             )

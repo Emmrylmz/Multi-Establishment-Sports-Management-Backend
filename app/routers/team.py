@@ -29,15 +29,15 @@ async def create_team(
     return await team_controller.register_team(team, request, user_id)
 
 
-@router.post("/insert_users_to_teams", status_code=status.HTTP_201_CREATED)
+@router.post("/insert_user_to_teams", status_code=status.HTTP_201_CREATED)
 async def insert_user(
     request: UserInsert, team_controller: TeamController = Depends(get_team_controller)
 ):
     """
     Insert users into teams.
     """
-    return await team_controller.add_user_to_team(
-        team_ids=request.team_ids, user_ids=request.user_ids
+    return await team_controller.add_user_to_teams(
+        team_ids=request.team_ids, user_id=request.user_id
     )
 
 

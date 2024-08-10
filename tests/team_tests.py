@@ -56,11 +56,11 @@ async def test_create_team(api_client, event_loop):
 @pytest.mark.asyncio
 async def test_insert_users_to_teams(api_client, event_loop):
     async def _test(client):
-        team_ids = "66800f9cc5e4ed61fc5fba2f"
-        user_ids = ["66957d9049b6287a81bb1bf2"]
-        insert_data = {"team_ids": [team_ids], "user_ids": user_ids}
+        team_ids = "6683da1449760fc82bdcb1f4"
+        user_ids = "66957d9049b6287a81bb1bf8"
+        insert_data = {"team_ids": [team_ids], "user_id": user_ids}
         response = await client.post(
-            "/api/teams/insert_users_to_teams", json=insert_data
+            "/api/teams/insert_user_to_teams", json=insert_data
         )
         assert response.status in [201, 200]  # Accept either Created or OK
         data = await response.json()

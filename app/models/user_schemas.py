@@ -18,7 +18,7 @@ class PydanticObjectId(BsonObjectId):
         return str(v)
 
 
-class UserRole(Enum):
+class UserRole(str, Enum):
     PLAYER = "Player"
     COACH = "Coach"
     MANAGER = "Manager"
@@ -30,7 +30,7 @@ class CreateUserSchema(BaseModel):
     passwordConfirm: str
     name: str
     role: UserRole
-    teams: List[str] = []
+    teams: Optional[List[str]]
     province: Optional[str]
 
     @validator("email", pre=True, always=True)
@@ -46,7 +46,7 @@ class CreateUserSchema(BaseModel):
                 "passwordConfirm": "strongpassword",
                 "password": "strongpassword",
                 "name": "John Doe",
-                "team_ids": ["team_bson_object_id"],
+                "teams": ["team_bson_object_id"],
             }
         }
 

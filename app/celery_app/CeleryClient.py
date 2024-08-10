@@ -36,7 +36,7 @@ class CeleryClient:
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
 
-        return self.app.task(wrapper)
+        return self.app.task(bind=True)(wrapper)
 
     def __getattr__(self, name):
         return getattr(self.app, name)

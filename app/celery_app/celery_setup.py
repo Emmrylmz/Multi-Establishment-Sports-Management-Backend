@@ -5,6 +5,7 @@ from .celery_db_access import db, get_db_connection
 from celery.schedules import crontab
 from functools import wraps
 from .celery_redis_access import sync_redis_client, get_sync_redis_client
+from celery.exceptions import Retry
 
 celery_app = CeleryClient(
     app_name="foo_app",
@@ -46,11 +47,27 @@ def with_redis(func):
     return wrapper
 
 
-def celery_task(*decorators):
-    def decorator(func):
-        for dec in reversed(decorators):
-            func = dec(func)
-        return celery_app.register_task(func)
+def celery_task(*decorators, max_retries=3, countdown=60):
+    def decorator(original_func):
+        @wraps(original_func)
+        def wrapper(self, *args, **kwargs):
+            func = original_func  # Start with the original function
+            try:
+                # Apply decorators
+                for dec in reversed(decorators):
+                    func = dec(func)
+
+                # Execute the decorated function
+                return func(*args, **kwargs)
+            except Exception as exc:
+                try:
+                    self.retry(exc=exc, max_retries=max_retries, countdown=countdown)
+                except Retry as retry:
+                    raise retry
+                except Exception as retry_exc:
+                    raise retry_exc from exc
+
+        return celery_app.register_task(wrapper)
 
     return decorator
 

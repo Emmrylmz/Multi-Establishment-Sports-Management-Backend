@@ -15,10 +15,10 @@ class MongoDBService:
     async def __init__(self, collection: AsyncIOMotorCollection):
         self.collection = collection
 
-    async def create(self, data: dict):
+    async def create(self, data: dict, session=None) -> dict:
         """Creates a new document and stores it in the database asynchronously."""
         data["created_at"] = datetime.utcnow()
-        result = await self.collection.insert_one(data)
+        result = await self.collection.insert_one(data, session=session)
 
         if result.inserted_id:
             # Create a new dict with the inserted _id

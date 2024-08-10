@@ -59,13 +59,13 @@ async def access_protected_resource(
     return {"message": "You have access to this protected resource"}
 
 
-@router.get("/refresh_token")
-async def refresh_token(
-    response: Response,
-    Authorize: AuthJWT = Depends(),
-    auth_controller: AuthController = Depends(get_auth_controller),
-):
-    return await auth_controller.refresh_access_token(response, Authorize)
+# @router.get("/refresh_token")
+# async def refresh_token(
+#     response: Response,
+#     Authorize: AuthJWT = Depends(),
+#     auth_controller: AuthController = Depends(get_auth_controller),
+# ):
+#     return await auth_controller.refresh_access_token(response, Authorize)
 
 
 @router.get("/logout", status_code=status.HTTP_200_OK)

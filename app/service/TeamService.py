@@ -30,58 +30,23 @@ class TeamService(MongoDBService):
         self.auth_collection = await get_collection("Auth", database)
         await super().__init__(self.collection)
 
-    async def add_users_to_teams(
-        self, user_ids, team_ids, user_role_field, register=True
+    async def add_user_to_teams(
+        self, user_id: ObjectId, team_ids: List[str], user_role_field: str, session=None
     ):
-        try:
-            async with await self.collection.database.client.start_session() as session:
-                async with session.start_transaction():
-                    teams_update_result = await self.collection.update_many(
-                        {"_id": {"$in": team_ids}},
-                        {"$addToSet": {user_role_field: {"$each": user_ids}}},
-                        session=session,
-                    )
+        result = await self.collection.update_many(
+            {"_id": {"$in": [ObjectId(tid) for tid in team_ids]}},
+            {"$addToSet": {user_role_field: user_id}},
+            session=session,
+        )
 
-                    users_update_result = None
-                    if not register:
-                        users_update_result = await self.auth_collection.update_many(
-                            {"_id": {"$in": user_ids}},
-                            {"$addToSet": {"teams": {"$each": team_ids}}},
-                            session=session,
-                        )
-
-                    if teams_update_result.modified_count > 0 and (
-                        register
-                        or (
-                            users_update_result
-                            and users_update_result.modified_count > 0
-                        )
-                    ):
-                        cache_keys = [f"team_users:{tid}" for tid in team_ids] + [
-                            f"teams_by_id:{','.join(map(str, team_ids))}",
-                            "all_teams",
-                            f"team_coaches:{','.join(map(str, team_ids))}",
-                        ]
-                        invalidate_caches.delay(str(team_ids))
-                        return {
-                            "status": "success",
-                            "modified_count_teams": teams_update_result.modified_count,
-                            "modified_count_users": (
-                                users_update_result.modified_count
-                                if users_update_result
-                                else 0
-                            ),
-                        }
-                    else:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail="Failed to add users to some or all teams or update users with teams.",
-                        )
-        except PyMongoError as e:
+        if result.matched_count == 0:
+            # No teams were found, raise an exception to stop the transaction
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Transaction failed: {str(e)}",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No teams found with the provided IDs",
             )
+
+        return result.modified_count
 
     async def get_team_users_by_id(
         self, team_id: str
@@ -137,17 +102,17 @@ class TeamService(MongoDBService):
         await self.redis_client.set(cache_key, team_data, expire=300)
         return team_data
 
-    async def check_team_exists(self, team_id):
-        team_id = ensure_object_id(team_id)
-        cache_key = f"team_exists:{team_id}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result is not None:
-            return cached_result
+    # async def check_team_exists(self, team_id):
+    #     team_id = ensure_object_id(team_id)
+    #     cache_key = f"team_exists:{team_id}"
+    #     cached_result = await self.redis_client.get(cache_key)
+    #     if cached_result is not None:
+    #         return cached_result
 
-        team = await self.get_by_id(team_id)
-        result = bool(team)
-        await self.redis_client.set(cache_key, result, expire=300)
-        return result
+    #     team = await self.get_by_id(team_id)
+    #     result = bool(team)
+    #     await self.redis_client.set(cache_key, result, expire=300)
+    #     return result
 
     async def get_teams_by_id(self, team_ids):
         cache_key = f"teams_by_id:{','.join(map(str, team_ids))}"
@@ -342,3 +307,9 @@ class TeamService(MongoDBService):
 
     async def get_unique_provinces(self):
         return await self.collection.distinct("province")
+
+    async def get_all_team_ids_by_province(self, province: str, session=None):
+        teams = await self.collection.find(
+            {"province": province}, {"_id": 1}, session=session
+        ).to_list(None)
+        return [str(team["_id"]) for team in teams]

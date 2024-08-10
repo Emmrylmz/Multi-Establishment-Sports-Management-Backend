@@ -18,6 +18,7 @@ from ..service.AuthService import AuthService
 from ..service.TokenService import PushTokenService
 from ..service.TeamService import TeamService
 from bson import ObjectId
+from app.utils import hash_password
 
 
 class AuthController:
@@ -43,63 +44,84 @@ class AuthController:
         self.team_service = team_service
 
     async def register_user(self, payload: CreateUserSchema):
-        if await self.auth_service.verify_user_credentials(
-            payload.email, payload.password
-        ):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, detail="Account already exists"
-            )
+        client = self.auth_service.collection.database.client
+        async with await client.start_session() as session:
+            async with session.start_transaction():
+                try:
+                    # Check if user already exists
+                    if await self.auth_service.verify_user_credentials(
+                        payload.email, payload.password
+                    ):
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail="Account already exists",
+                        )
 
-        if payload.password != payload.passwordConfirm:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match"
-            )
+                    # Validate password
+                    if payload.password != payload.passwordConfirm:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="Passwords do not match",
+                        )
 
-        user_data = payload.dict(exclude_none=False)
-        team_ids = payload.teams
-        province = user_data.get("province")
+                    # Prepare user data
+                    user_data = payload.dict(exclude={"passwordConfirm"})
+                    user_data["password"] = hash_password(user_data["password"])
 
-        # If user role is manager, fetch all team ids
-        if user_data.get("role") == UserRole.MANAGER and province and len(province) > 0:
-            team_ids = await self.team_service.get_all_teams_by_province(
-                province=province
-            )
-        else:
-            team_ids = [str(team_id) for team_id in team_ids]
+                    # Handle team assignment based on role
+                    if user_data["role"] == UserRole.MANAGER:
+                        if not user_data.get("province"):
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="Province is required for managers",
+                            )
+                        team_ids = await self.team_service.get_all_team_ids_by_province(
+                            user_data["province"], session=session
+                        )
+                        user_data["teams"] = team_ids
+                    else:
 
-        user_data["teams"] = team_ids
-        user_data["teams"] = team_ids
-        for team_id in payload.teams:
-            if not await self.team_service.check_team_exists(team_id):
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Team with id {team_id} not found",
-                )
+                        user_data["teams"] = [str(team_id) for team_id in payload.teams]
 
-        hashed_password = self.hash_handler(user_data["password"])
-        user_data["password"] = hashed_password
-        user_data.pop("passwordConfirm", None)
+                    # Create user
+                    new_user = await self.auth_service.create(
+                        user_data, session=session
+                    )
+                    user_id = ObjectId(new_user["_id"])
 
-        new_user = await self.auth_service.create(user_data)
-        user_id = ObjectId(new_user["_id"])
+                    # Update teams if user is not a manager
+                    if user_data["role"] != UserRole.MANAGER and user_data["teams"]:
+                        user_role_field = (
+                            "team_players"
+                            if user_data["role"] == UserRole.PLAYER
+                            else "team_coaches"
+                        )
+                        teams_updated = await self.team_service.add_user_to_teams(
+                            user_id=user_id,
+                            team_ids=user_data["teams"],
+                            user_role_field=user_role_field,
+                            session=session,
+                        )
+                        if teams_updated == 0:
+                            # No teams were actually updated (they might exist but user was already added)
+                            raise HTTPException(
+                                status_code=status.HTTP_400_BAD_REQUEST,
+                                detail="User was not added to any teams. They might already be a member of all specified teams.",
+                            )
+
+                    await session.commit_transaction()
+                except HTTPException as http_ex:
+                    await session.abort_transaction()
+                    raise http_ex
+                except Exception as e:
+                    await session.abort_transaction()
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"An error occurred during user registration: {str(e)}",
+                    )
+
+        # Prepare response (exclude sensitive data)
         user_dict = {k: v for k, v in new_user.items() if k != "password"}
-
-        if len(payload.teams) > 0:
-
-            user_role_field = (
-                "team_players"
-                if user_data["role"] == UserRole.PLAYER
-                else "team_coaches"
-            )
-            result = await self.team_service.add_users_to_teams(
-                user_ids=[user_id],
-                team_ids=team_ids,
-                user_role_field=user_role_field,
-                register=True,
-            )
-
-            return {"status": "success", "user": user_dict, "result": result}
-
         return {"status": "success", "user": user_dict}
 
     async def login_user(self, payload: LoginUserSchema, Authorize, response: Response):
@@ -265,10 +287,13 @@ class AuthController:
                     deleted_team = await self.team_service.remove_user_from_teams(
                         user_id_obj, user["teams"], session=session
                     )
+                    await session.commit_transaction()
                     return {"deleted_user": deleted_user, "deleted_team": deleted_team}
                 except HTTPException as e:
+                    await session.abort_transaction()
                     raise e
                 except Exception as e:
+                    await session.abort_transaction()
                     raise HTTPException(
                         status_code=500, detail=f"An error occurred: {str(e)}"
                     )

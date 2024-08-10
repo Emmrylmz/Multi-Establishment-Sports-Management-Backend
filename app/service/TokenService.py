@@ -7,6 +7,8 @@ from .MongoDBService import MongoDBService
 from ..database import get_collection, get_database
 from ..redis_client import RedisClient
 from typing import List, Optional
+from pymongo.errors import PyMongoError
+from app.celery_app.celery_tasks import invalidate_caches
 
 
 class PushTokenService(MongoDBService):
@@ -26,25 +28,51 @@ class PushTokenService(MongoDBService):
         await super().__init__(self.collection)
 
     async def save_token(self, payload: PushTokenSchema, user_id: str) -> bool:
-        try:
-            data = payload.dict()
-            token = await self.collection.find_one({"_id": ObjectId(user_id)})
-            if token:
-                res = await self.collection.update_one(
-                    {"_id": ObjectId(user_id)}, {"$set": {"token": payload.token}}
-                )
-                success = res.modified_count > 0
-            else:
-                data["_id"] = ObjectId(user_id)
-                result = await self.collection.insert_one(data)
-                success = result.inserted_id is not None
+        client = self.collection.database.client
+        async with await client.start_session() as session:
+            try:
+                async with session.start_transaction():
+                    data = payload.dict()
+                    user_obj_id = ObjectId(user_id)
 
-            if success:
-                invalidate_caches.delay(["all_user_tokens", f"user_token:{user_id}"])
-            return success
-        except Exception as e:
-            logging.error(f"Error saving token: {e}")
-            return False
+                    # Use upsert to either update existing document or insert new one
+                    result = await self.collection.update_one(
+                        {"_id": user_obj_id},
+                        {
+                            "$set": {
+                                "token": payload.token,
+                                **{k: v for k, v in data.items() if k != "token"},
+                            }
+                        },
+                        upsert=True,
+                        session=session,
+                    )
+
+                    success = (
+                        result.modified_count > 0 or result.upserted_id is not None
+                    )
+
+                    if success:
+                        # Perform cache invalidation within the transaction
+                        invalidate_caches.delay(
+                            ["all_user_tokens", f"user_token:{user_id}"]
+                        )
+
+                    await session.commit_transaction()
+                    return success
+
+            except PyMongoError as e:
+                logging.error(f"MongoDB error saving token: {e}")
+                return False
+            except Exception as e:
+                logging.error(f"Unexpected error saving token: {e}")
+                return False
+            finally:
+                if session.in_transaction:
+                    try:
+                        await session.abort_transaction()
+                    except PyMongoError as e:
+                        logging.error(f"Error aborting transaction: {e}")
 
     async def get_team_player_tokens(self, team_id: str) -> List[str]:
         cache_key = f"team_player_tokens:{team_id}"

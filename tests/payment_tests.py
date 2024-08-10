@@ -11,7 +11,7 @@ from .event_test import (
 )
 from app.models.payment_schemas import PaymentType, PaymentWith, Status
 
-BASE_URL = "http://localhosst:80"  # Adjust if needed
+BASE_URL = "http://localhost:80"  # Adjust if needed
 
 
 @pytest.fixture

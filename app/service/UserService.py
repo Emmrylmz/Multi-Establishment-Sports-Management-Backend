@@ -109,22 +109,22 @@ class UserService(MongoDBService):
         await self.redis_client.set(cache_key, users, expire=300)  # Cache for 5 minutes
         return users
 
-    # async def search_users_by_name(self, query: str) -> List[Dict[str, Any]]:
-    #     cache_key = f"search_users:{query}"
-    #     cached_data = await self.redis_client.get(cache_key)
-    #     if cached_data:
-    #         return cached_data
+    async def search_users_by_name(self, query: str) -> List[Dict[str, Any]]:
+        cache_key = f"search_users:{query}"
+        cached_data = await self.redis_client.get(cache_key)
+        if cached_data:
+            return cached_data
 
-    #     pattern = f".*{query}.*"
-    #     regex = {"$regex": pattern, "$options": "i"}
+        pattern = f".*{query}.*"
+        regex = {"$regex": pattern, "$options": "i"}
 
-    #     users = await self.collection.find(
-    #         {"name": regex}, {"_id": 1, "name": 1, "photo": 1}
-    #     ).to_list(length=None)
+        users = await self.collection.find(
+            {"name": regex}, {"_id": 1, "name": 1, "photo": 1}
+        ).to_list(length=None)
 
-    #     # Convert ObjectId to string for JSON serialization
-    #     for user in users:
-    #         user["_id"] = str(user["_id"])
+        # Convert ObjectId to string for JSON serialization
+        for user in users:
+            user["_id"] = str(user["_id"])
 
-    #     await self.redis_client.set(cache_key, users, expire=60)  # Cache for 1 minute
-    #     return users
+        await self.redis_client.set(cache_key, users, expire=60)  # Cache for 1 minute
+        return users

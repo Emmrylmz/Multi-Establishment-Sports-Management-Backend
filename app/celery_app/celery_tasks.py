@@ -17,7 +17,7 @@ from bson.errors import InvalidId
 logging = setup_logger(__name__)
 
 
-@celery_task(with_db)
+@celery_task(with_db, max_retries=3, countdown=60)
 def update_all_user_attendance_stats(database, *args, **kwargs):
     logging.info("Starting update_user_attendance_stats task")
     db = database.client[settings.MONGO_INITDB_DATABASE]
@@ -187,9 +187,15 @@ def update_all_user_attendance_stats(database, *args, **kwargs):
     logging.info("Finished update_user_attendance_stats task")
 
 
-@celery_task(with_db)
+@celery_task(with_db, max_retries=3, countdown=60)
 def update_monthly_balance(
-    database, year: int, month: int, province: str, amount_change: float
+    database,
+    year: int,
+    month: int,
+    province: str,
+    amount_change: float,
+    *args,
+    **kwargs,
 ):
     client = database.client[settings.MONGO_INITDB_DATABASE]
     balance_collection = client["Monthly_Balance"]
@@ -209,7 +215,7 @@ def update_monthly_balance(
     )
 
 
-@celery_task(with_redis)
+@celery_task(with_redis, max_retries=3, countdown=60)
 def invalidate_caches(redis_conn, cache_keys, *args, **kwargs):
 
     for key in cache_keys:
@@ -220,7 +226,7 @@ def invalidate_caches(redis_conn, cache_keys, *args, **kwargs):
 def setup_periodic_tasks(sender, **kwargs):
     # Executes every 12 hours
     sender.add_periodic_task(
-        crontab(minute="*/1"),
+        crontab(hour="*/12"),
         update_all_user_attendance_stats.s(),
         name="update attendance stats every 12 hours",
     )

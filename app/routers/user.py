@@ -20,7 +20,7 @@ async def update_user_information(
     return await user_controller.update_user_information(payload, user_id)
 
 
-@router.post("/{user_id}", status_code=status.HTTP_200_OK)
+@router.get("/{user_id}", status_code=status.HTTP_200_OK)
 async def get_user_information(
     user_id: str,
     user_controller: UserController = Depends(get_user_controller),
