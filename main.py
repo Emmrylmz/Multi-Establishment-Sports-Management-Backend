@@ -40,10 +40,10 @@ class ProfilingMiddleware(BaseHTTPMiddleware):
 
 
 app = FooApp(
-    rabbit_url="amqp://guest:guest@rabbitmq:5672/",
-    firebase_cred_path="app/service/firebaseKey.json",
-    database_uri="mongodb+srv://banleue13:Mrfadeaway.1@cluster0.lvzd0dt.mongodb.net/?retryWrites=true&w=majority",
-    redis_url="redis://redis:6379/0",
+    rabbit_url=settings.RABBITMQ_URL,
+    firebase_cred_path=settings.FIREBASE_CREDENTIALS_PATH,
+    database_uri=settings.DATABASE_URL,
+    redis_url=settings.REDIS_URL,
 )
 
 # Add profiler middleware if in debug mode
