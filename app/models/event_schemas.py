@@ -64,7 +64,7 @@ class CreateEventSchema(BaseModel):
 
 class ListTeamEventSchema(BaseModel):
     page: int
-    events_per_page: Optional[int]
+    page_size: Optional[int]
     team_ids: List[str]
 
 
@@ -83,12 +83,17 @@ class EventResponseSchema(BaseModel):
 class Event(BaseModel):
     event_type: EventType
     place: str
-    event_date: datetime  # corrected from event_data
+    description: Optional[str]
+    end_datetime: datetime
+    start_datetime: datetime
+    team_id: str
+    event_id: str
     description: str
 
 
 class ListEventResponseSchema(BaseModel):
     team_name: str
+    team_id: str
     events: List[Event]
 
 
@@ -127,3 +132,31 @@ class CreatePrivateLessonSchema(BaseModel):
 class PrivateLessonResponseSchema(BaseModel):
     lesson_id: str
     status: str
+
+
+class ListEventParams(BaseModel):
+    page: int = 1
+    page_size: int = 10
+    team_ids: List[str] = None
+    sort_order: str = "asc"  # "asc" for soonest first, "desc" for latest first
+
+
+class EventResponse(BaseModel):
+    event_id: str
+    description: str
+    event_type: str
+    place: str
+    start_datetime: datetime
+    end_datetime: datetime
+    created_at: datetime
+    creator_id: str
+    team_id: str
+    team_name: str
+
+
+class ListEventResponseSchema(BaseModel):
+    events: List[EventResponse]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int

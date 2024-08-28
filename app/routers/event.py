@@ -6,6 +6,8 @@ from ..models.event_schemas import (
     UpdateEventSchema,
     EventResponseSchema,
     CreatePrivateLessonSchema,
+    ListEventResponseSchema,
+    ListEventParams,
 )
 from ..models.attendance_schemas import (
     AttendanceFormSchema,
@@ -98,12 +100,16 @@ async def fetch_attendances_for_event(
     return await event_controller.fetch_attendances_for_event(payload.event_id)
 
 
-@router.post("/get_upcoming_events", status_code=status.HTTP_200_OK)
-async def get_upcoming_events(
-    payload: ListTeamEventSchema,
+@router.post(
+    "/get_upcoming_events",
+    status_code=status.HTTP_200_OK,
+    response_model=ListEventResponseSchema,
+)
+async def get_events(
+    params: ListEventParams,
     event_controller: EventController = Depends(get_event_controller),
-):
-    return await event_controller.get_upcoming_events(payload.team_ids)
+) -> ListEventResponseSchema:
+    return await event_controller.get_events(params)
 
 
 @router.put(

@@ -8,6 +8,7 @@ from ..models.user_schemas import (
     CreateUserSchema,
     UserAttributesSchema,
     UserResponseSchema,
+    EmailSchema,
 )
 from app.oauth2 import AuthJWT
 from ..config import settings
@@ -86,35 +87,51 @@ async def delete_user(
     return await auth_controller.delete_user(user_id=user_id)  # , Authorize
 
 
-@router.get("/inspect-celery")
-def inspect_celery_endpoint(request: Request):
-    app = request.app
-    celery_app = app.celery_app
-    result = inspect_celery_tasks(celery_app)
-    return {"message": "Celery inspection complete", "result": result}
+@router.post("/forgot-password")
+async def forgot_password(email: EmailSchema):
+    reset_token = await db.reset_tokens.find_one(
+        {"token": reset_data.token, "expires": {"$gt": datetime.utcnow()}}
+    )
+    if not reset_token:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+    hashed_password = pwd_context.hash(reset_data.new_password)
+    await db.users.update_one(
+        {"_id": reset_token["user_id"]}, {"$set": {"password": hashed_password}}
+    )
+    await db.reset_tokens.delete_one({"_id": reset_token["_id"]})
+    return {"message": "Password reset successful"}
 
 
-def inspect_celery_tasks(celery_app):
-    # Create an inspect instance
-    i = celery_app.control.inspect()
+# @router.get("/inspect-celery")
+# def inspect_celery_endpoint(request: Request):
+#     app = request.app
+#     celery_app = app.celery_app
+#     result = inspect_celery_tasks(celery_app)
+#     return {"message": "Celery inspection complete", "result": result}
 
-    # Get scheduled tasks
-    scheduled = i.scheduled()
 
-    if scheduled:
-        for worker, tasks in scheduled.items():
-            print(f"Scheduled tasks for worker {worker}:")
-            for task in tasks:
-                print(f"  - {task['name']} : {task['schedule']}")
-    else:
-        print("No scheduled tasks found.")
+# def inspect_celery_tasks(celery_app):
+#     # Create an inspect instance
+#     i = celery_app.control.inspect()
 
-    # Check registered tasks
-    registered = i.registered()
-    if registered:
-        for worker, tasks in registered.items():
-            print(f"Registered tasks for worker {worker}:")
-            for task in tasks:
-                print(f"  - {task}")
-    else:
-        print("No registered tasks found.")
+#     # Get scheduled tasks
+#     scheduled = i.scheduled()
+
+#     if scheduled:
+#         for worker, tasks in scheduled.items():
+#             print(f"Scheduled tasks for worker {worker}:")
+#             for task in tasks:
+#                 print(f"  - {task['name']} : {task['schedule']}")
+#     else:
+#         print("No scheduled tasks found.")
+
+#     # Check registered tasks
+#     registered = i.registered()
+#     if registered:
+#         for worker, tasks in registered.items():
+#             print(f"Registered tasks for worker {worker}:")
+#             for task in tasks:
+#                 print(f"  - {task}")
+#     else:
+#         print("No registered tasks found.")

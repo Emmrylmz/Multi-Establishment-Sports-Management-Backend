@@ -142,6 +142,20 @@ class AuthController:
             subject=str(user["_id"]),
             expires_time=timedelta(minutes=settings.REFRESH_TOKEN_EXPIRES_IN),
         )
+        team_ids = user.get("teams", [])
+
+        # Fetch the teams using the team IDs
+        teams_cursor = self.team_service.collection.find(
+            {"_id": {"$in": team_ids}}, {"_id": 1, "team_name": 1}
+        )
+
+        teams = await teams_cursor.to_list(length=None)
+
+        # Convert the list of teams to a dictionary with _id as key and team_name as value
+        user_teams = [
+            {"team_id": str(team["_id"]), "team_name": team["team_name"]}
+            for team in teams
+        ]
 
         # Optionally, store the refresh token in the database or another secure location
         # await self.auth_service.store_refresh_token(user["_id"], refresh_token)
@@ -155,15 +169,12 @@ class AuthController:
             expires=settings.REFRESH_TOKEN_EXPIRES_IN * 60,
         )
 
-        # Convert ObjectId to string for teams
-        teams = [str(team_id) for team_id in user.get("teams", [])]
-
         user_model = User(
             id=str(user["_id"]),
             name=user["name"],
             role=user["role"],
             email=user["email"],
-            teams=teams,
+            teams=user_teams,
             province=user["province"],
         )
         user_response = UserResponseSchema(

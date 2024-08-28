@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, validator, constr, Field
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 from datetime import datetime
 from bson.objectid import ObjectId as BsonObjectId
 from bson import ObjectId
@@ -51,12 +51,17 @@ class CreateUserSchema(BaseModel):
         }
 
 
+class Team(BaseModel):
+    team_id: str
+    team_name: str
+
+
 class User(BaseModel):
     id: str = Field(..., alias="_id")
     name: str
     role: str
     email: str
-    teams: List[str]
+    teams: List[Team]
     province: str
 
     class Config:
@@ -67,7 +72,7 @@ class User(BaseModel):
 class UserResponseSchema(BaseModel):
     status: str
     access_token: str
-    refresh_token: str
+    # refresh_token: str
     user: User
 
     class Config:
@@ -117,3 +122,7 @@ class UserResponse(BaseModel):
 
 class UserInfoByIdSchema(BaseModel):
     user_id: str
+
+
+class EmailSchema(BaseModel):
+    email: EmailStr

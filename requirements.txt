@@ -2,9 +2,10 @@ python-dateutil
 aiocache
 redis
 httpx
+celery
 pytest
 fastapi
-# contextlib
+bcrypt
 python-dotenv==1.0.0
 Faker
 locust

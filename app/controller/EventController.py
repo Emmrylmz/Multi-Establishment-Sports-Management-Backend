@@ -16,6 +16,7 @@ from ..models.event_schemas import (
     CreatePrivateLessonSchema,
     PrivateLessonResponseSchema,
     RequestStatus,
+    ListEventParams,
 )
 from ..models.attendance_schemas import AttendanceFormSchema, AttendanceRecord
 from ..models.user_schemas import UserRole
@@ -26,12 +27,6 @@ from ..redis_client import RedisClient
 import logging
 from datetime import datetime
 from fastapi.responses import JSONResponse
-from ..dependencies.service_dependencies import (
-    get_auth_service,
-    get_payment_service,
-    get_team_service,
-    get_event_service,
-)
 
 
 class EventController:
@@ -115,22 +110,6 @@ class EventController:
         # raise HTTPException(status_code=404, detail="Event not found")
         return EventResponseSchema(event_id=event_id, status="deleted")
 
-    async def list_events(self, team_id: str):
-        logging.debug(
-            f"list_events called with team_id: {team_id} of type {type(team_id)}"
-        )
-
-        if isinstance(team_id, list):
-            logging.error(f"Invalid team_id type: {type(team_id)}, value: {team_id}")
-            raise HTTPException(status_code=400, detail="Invalid team_id format")
-
-        team_id = ObjectId(team_id)
-        query = {"team_id": team_id}
-        events = await self.event_service.list(query)
-        team = await self.team_service.get_by_id(team_id)
-        response = ListEventResponseSchema(team_name=team["team_name"], events=events)
-        return response
-
     async def get_team_events(
         self, team_ids: List[str], page: int
     ) -> List[Dict[str, Any]]:
@@ -146,22 +125,6 @@ class EventController:
         return await self.event_service.get_all_events_by_team_id(
             team_object_ids, page=page
         )
-
-    async def list_events(self, team_id: str):
-        logging.debug(
-            f"list_events called with team_id: {team_id} of type {type(team_id)}"
-        )
-
-        if isinstance(team_id, list):
-            logging.error(f"Invalid team_id type: {type(team_id)}, value: {team_id}")
-            raise HTTPException(status_code=400, detail="Invalid team_id format")
-
-        team_id = ObjectId(team_id)
-        query = {"team_id": team_id}
-        events = await self.event_service.list(query)
-        team = await self.team_service.get_by_id(team_id)
-        response = ListEventResponseSchema(team_name=team["team_name"], events=events)
-        return response
 
     async def add_attendance(self, attendance_form: AttendanceFormSchema):
         event_id = attendance_form.event_id
@@ -182,8 +145,9 @@ class EventController:
     async def fetch_attendances_for_event(self, event_id: str):
         return await self.event_service.get_attendances_by_event_id(event_id)
 
-    async def get_upcoming_events(self, team_ids: List[str]) -> List[Dict[str, Any]]:
-        return await self.event_service.get_upcoming_events(team_ids)
+    async def get_events(self, params: ListEventParams) -> ListEventResponseSchema:
+        print(params)
+        return await self.event_service.get_events(params)
 
     async def update_attendances(
         self, attendances: List[AttendanceRecord], event_id: str
@@ -341,15 +305,3 @@ class EventController:
         return await self.event_service.get_private_lesson_by_user_id(
             id=player_id, field="player_id"
         )
-
-
-async def get_event_controller(
-    event_service: EventService = Depends(get_event_service),
-    auth_service: AuthService = Depends(get_auth_service),
-    payment_service: PaymentService = Depends(get_payment_service),
-    team_service: TeamService = Depends(get_team_service),
-) -> EventController:
-
-    return await EventController.create(
-        event_service, auth_service, payment_service, team_service
-    )

@@ -41,14 +41,15 @@ async def insert_user(
     )
 
 
-@router.post("/get_team_users", status_code=status.HTTP_200_OK)
+@router.get("/get_team_users/{team_id}", status_code=status.HTTP_200_OK)
 async def get_team_users(
-    payload: TeamPlayers, team_controller: TeamController = Depends(get_team_controller)
+    team_controller: TeamController = Depends(get_team_controller),
+    team_id: str = None,
 ):
     """
     Get users of a team by team ID.
     """
-    return await team_controller.get_team_users_by_id(team_id=payload.team_id)
+    return await team_controller.get_team_users_by_id(team_id=team_id)
 
 
 @router.post("/get_team_by_id", status_code=status.HTTP_200_OK)
@@ -76,3 +77,7 @@ async def get_all_coaches(
     province: str = None,
 ):
     return await team_controller.get_all_coaches(province=province)
+
+
+# @router.post("/get_initial_team_data", status_code=status.HTTP_200_OK)
+# async def get_all

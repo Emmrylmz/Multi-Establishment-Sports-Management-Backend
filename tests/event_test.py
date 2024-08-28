@@ -96,13 +96,15 @@ async def run_test(api_client, test_func, *args, **kwargs):
 
 @pytest.fixture
 def event_data():
+    one_year_from_now = datetime.now() + timedeltda(days=365)
+
     return {
         "event_type": "game",
         "place": "Test Stadium",
-        "start_datetime": datetime.now().isoformat(),
-        "end_datetime": (datetime.now() + timedelta(hours=2)).isoformat(),
-        "created_at": datetime.now().isoformat(),
-        "team_id": str(ObjectId()),
+        "start_datetime": one_year_from_now.isoformat(),
+        "end_datetime": (one_year_from_now + timedelta(hours=2)).isoformat(),
+        "created_at": datetime.now().isoformat(),  # Keeping created_at as current time
+        "team_id": "66800f9cc5e4ed61fc5fba2f",
         "description": "Test Event",
         "creator_id": str(ObjectId()),
     }

@@ -70,9 +70,3 @@ class NoteService(MongoDBService):
             raise ValueError(f"Unknown note type: {note_type}")
 
         # Ensure that only the relevant field is set based on the note type
-        if note_type != NoteType.INDIVIDUAL:
-            payload.recipient_id = None
-        if note_type != NoteType.TEAM:
-            payload.team_id = None
-        if note_type != NoteType.PROVINCE:
-            payload.province_id = None

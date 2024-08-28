@@ -14,6 +14,9 @@ from ..models.event_schemas import (
     RequestStatus,
     EventType,
     EventResponseSchema,
+    ListEventResponseSchema,
+    ListEventParams,
+    ListEventResponseSchema,
 )
 from ..models.attendance_schemas import AttendanceFormSchema, AttendanceRecord
 from ..redis_client import RedisClient
@@ -173,65 +176,120 @@ class EventService(MongoDBService):
         await self.redis_client.set(cache_key, serialized_result, expire=60)
         return result
 
-    async def get_upcoming_events(
-        self,
-        team_ids: List[str],
-        skip: int = 0,
-        limit: int = 20,
-        fields: Optional[List[str]] = None,
-    ):
-        cache_key = f"upcoming_events_{team_ids}_{skip}_{limit}_{fields}"
-        cached_result = await self.redis_client.get(cache_key)
-        if cached_result:
-            return loads(cached_result)
-
+    async def get_events(self, params: ListEventParams) -> ListEventResponseSchema:
         try:
-            team_object_ids = [ObjectId(team_id) for team_id in team_ids]
-            projection = {field: 1 for field in fields} if fields else None
-
-            pipeline = [
-                {
-                    "$match": {
-                        "team_id": {"$in": team_object_ids},
-                        "start_datetime": {"$gt": datetime.utcnow()},
-                    }
-                },
-                {
-                    "$lookup": {
-                        "from": "Team",
-                        "localField": "team_id",
-                        "foreignField": "_id",
-                        "as": "team_info",
-                    }
-                },
-                {"$unwind": "$team_info"},
-                {
-                    "$group": {
-                        "_id": "$team_id",
-                        "team_name": {"$first": "$team_info.team_name"},
-                        "events": {"$push": "$$ROOT"},
-                    }
-                },
-                {
-                    "$project": {
-                        "_id": 0,
-                        "team_id": {"$toString": "$_id"},
-                        "team_name": 1,
-                        "events": 1,
-                    }
-                },
-                {"$skip": skip},
-                {"$limit": limit},
-            ]
-
-            if projection:
-                pipeline.append({"$project": projection})
+            pipeline = self._build_pipeline(params)
+            logger.debug(f"MongoDB Aggregation Pipeline: {pipeline}")
 
             result = await self.collection.aggregate(pipeline).to_list(length=None)
-            await self.redis_client.set(cache_key, dumps(result), expire=300)
-            return result
+            logger.debug(f"Aggregation Result: {result}")
+
+            if not result:
+                logger.warning(f"No events found for params: {params}")
+                return ListEventResponseSchema(
+                    events=[],
+                    total_count=0,
+                    page=params.page,
+                    page_size=params.page_size,
+                    total_pages=0,
+                )
+
+            events = result[0]["events"]
+            total_count = result[0]["total_count"]
+            total_pages = -(-total_count // params.page_size)  # Ceiling division
+
+            logger.info(f"Found {total_count} events for params: {params}")
+
+            return ListEventResponseSchema(
+                events=events,
+                total_count=total_count,
+                page=params.page,
+                page_size=params.page_size,
+                total_pages=total_pages,
+            )
         except Exception as e:
+            logger.error(f"Error in get_events: {str(e)}", exc_info=True)
             raise HTTPException(status_code=500, detail=str(e))
+
+    def _build_pipeline(self, params: ListEventParams):
+        match_stage = self._build_match_stage(params)
+        sort_order = -1 if params.sort_order == "desc" else 1
+
+        pipeline = [
+            match_stage,
+            {"$sort": {"start_datetime": sort_order}},
+            {
+                "$lookup": {
+                    "from": "Team",  # Make sure this matches your actual collection name
+                    "let": {"team_id": {"$toObjectId": "$team_id"}},
+                    "pipeline": [
+                        {"$match": {"$expr": {"$eq": ["$_id", "$$team_id"]}}},
+                        {"$project": {"team_name": 1, "_id": 0}},
+                    ],
+                    "as": "team_info",
+                }
+            },
+            {
+                "$addFields": {
+                    "team_name": {
+                        "$ifNull": [
+                            {"$arrayElemAt": ["$team_info.team_name", 0]},
+                            "Unknown Team",  # Default value if team is not found
+                        ]
+                    }
+                }
+            },
+            {
+                "$project": {
+                    "event_id": {"$toString": "$_id"},
+                    "description": 1,
+                    "event_type": 1,
+                    "place": 1,
+                    "start_datetime": 1,
+                    "end_datetime": 1,
+                    "created_at": 1,
+                    "creator_id": 1,
+                    "team_id": 1,
+                    "team_name": 1,
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "events": {"$push": "$$ROOT"},
+                    "total_count": {"$sum": 1},
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "events": {
+                        "$slice": [
+                            "$events",
+                            (params.page - 1) * params.page_size,
+                            params.page_size,
+                        ]
+                    },
+                    "total_count": 1,
+                }
+            },
+        ]
+        return pipeline
+
+    def _build_match_stage(self, params: ListEventParams):
+        match_conditions = {}
+        if params.team_ids:
+            match_conditions["team_id"] = {
+                "$in": params.team_ids
+            }  # Remove ObjectId conversion
+        # if params.user_id:
+        #     match_conditions["creator_id"] = params.user_id
+
+        # Add a date range check if needed
+        match_conditions["end_datetime"] = {"$gt": datetime.utcnow()}
+
+        logger.debug(f"Match conditions: {match_conditions}")
+        return {"$match": match_conditions}
 
     async def update_attendance(
         self, new_attendances: List[AttendanceRecord], event_id: str

@@ -23,18 +23,18 @@ class NoteBase(BaseModel):
 
 class NoteCreate(NoteBase):
     note_type: NoteType
-    recipient_id: Optional[str] = None  # For individual notes
-    team_id: Optional[str] = None  # For team notes
-    province_id: Optional[str] = None  # For province notes
+    recipient_id: Optional[str]  # For individual notes
+    team_id: Optional[str]  # For team notes
+    province_id: Optional[str]  # For province notes
 
 
 class NoteInDB(NoteBase):
     id: str = None
     author_id: str
     note_type: NoteType
-    recipient_id: Optional[str] = None
-    team_id: Optional[str] = None
-    province_id: Optional[str] = None
+    recipient_id: Optional[str]
+    team_id: Optional[str]
+    province_id: Optional[str]
 
 
 class NoteResponse(NoteInDB):
