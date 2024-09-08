@@ -90,7 +90,7 @@ async def add_attendances_to_event(
 
 @router.post(
     "/fetch_attendances_for_event",
-    response_model=FetchAttendanceFromEventIdResponseSchema,
+    # response_model=FetchAttendanceFromEventIdResponseSchema,
     status_code=status.HTTP_200_OK,
 )
 async def fetch_attendances_for_event(

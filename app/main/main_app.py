@@ -31,6 +31,7 @@ async def lifespan(app: "FooApp"):
     )
     app.mongodb_client = client
     app.mongodb = client[settings.MONGO_INITDB_DATABASE]
+
     await ensure_indexes(app.mongodb)
 
     # Initialize other services

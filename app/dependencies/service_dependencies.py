@@ -12,6 +12,7 @@ from ..service.PaymentService import PaymentService
 from ..service.ConstantsService import ConstantsService
 from ..service.NoteService import NoteService
 from ..redis_client.RedisClient import get_redis_client
+from ..repositories.EventRepository import EventRepository
 
 
 def get_db(request: Request) -> AsyncIOMotorDatabase:
@@ -22,11 +23,19 @@ def get_redis(request: Request) -> RedisClient:
     return request.app.redis_client
 
 
+async def get_event_repository(
+    database: AsyncIOMotorDatabase = Depends(get_db),
+) -> EventRepository:
+    return await EventRepository.initialize(database=database)
+
+
 async def get_event_service(
-    db: AsyncIOMotorDatabase = Depends(get_db),
+    event_repository: EventRepository = Depends(get_event_repository),
     redis: RedisClient = Depends(get_redis_client),
 ):
-    return await EventService.initialize(db, redis)
+    return await EventService.initialize(
+        event_repository=event_repository, redis_client=redis
+    )
 
 
 async def get_auth_service(

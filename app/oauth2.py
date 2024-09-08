@@ -36,6 +36,7 @@ class UserNotFound(Exception):
 
 
 async def require_user(Authorize: AuthJWT = Depends()):
+    
     try:
         Authorize.jwt_required()
         user_id = Authorize.get_jwt_subject()

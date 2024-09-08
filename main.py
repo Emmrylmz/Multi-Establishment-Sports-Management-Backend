@@ -73,9 +73,9 @@ app.include_router(notes_router, tags=["notes"], prefix="/api/notes")
 
 
 # Startup and Shutdown Events
-@app.on_event("startup")
-async def startup_event():
-    await app.initialize_services()
+# @app.on_event("startup")
+# async def startup_event():
+#     # await app.initialize_services()
 
 
 @app.on_event("shutdown")

@@ -85,7 +85,7 @@ class EventController:
         return EventResponseSchema(event_id=created_event["_id"], status="created")
 
     async def read_event(self, event_id: str):
-        event = await self.event_service.get_by_id(event_id)
+        event = await self.event_service.get_event_by_id(event_id)
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         return event
