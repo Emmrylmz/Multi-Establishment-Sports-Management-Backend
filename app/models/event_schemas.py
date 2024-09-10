@@ -30,7 +30,7 @@ class CreateEventSchema(BaseModel):
     place: str
     start_datetime: datetime  # Combined start date and time
     end_datetime: datetime  # Combined end date and time
-    created_at: datetime
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     team_id: str
     description: str
     creator_id: str

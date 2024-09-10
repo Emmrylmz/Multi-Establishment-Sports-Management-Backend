@@ -5,7 +5,7 @@ from typing import List, Dict, Optional
 from pymongo import UpdateOne
 from datetime import datetime
 from ..database import get_collection
-from ..models.event_schemas import ListEventParams
+from ..models.event_schemas import ListEventParams, CreateEventSchema
 
 
 class EventRepository:
@@ -27,11 +27,15 @@ class EventRepository:
         self.user_collection = await get_collection("User_Info", database)
         return self
 
+    async def create_event(self, event: CreateEventSchema):
+        result = await self.collection.insert_one(event)
+        return result.inserted_id
+
     async def get_private_lesson_by_id(self, private_lesson_id: str):
         return await self.private_lesson_collection.find_one({"_id": private_lesson_id})
 
     async def get_event_by_id(self, event_id: str):
-        return await self.collection.find_one({"_id": event_id})
+        return await self.collection.find_one({"_id": ObjectId(event_id)})
 
     async def get_event_by_team_ids(
         self,

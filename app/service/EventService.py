@@ -16,6 +16,7 @@ from ..models.event_schemas import (
     ListEventResponseSchema,
     ListEventParams,
     ListEventResponseSchema,
+    CreateEventSchema,
 )
 from ..models.attendance_schemas import AttendanceFormSchema, AttendanceRecord
 from ..redis_client import RedisClient
@@ -26,7 +27,6 @@ from redis.exceptions import RedisError
 import json
 from app.utils import JSONEncoder, logging
 from ..repositories.EventRepository import EventRepository
-from fastapi.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,15 @@ class EventService:
     ):
         self.event_repository = event_repository
         self.redis_client = redis_client
+
+    async def create_event(self, event: CreateEventSchema):
+        result = await self.event_repository.create_event(event)
+        if result:
+            event["_id"] = str(result)
+            print(event)
+            return event
+        else:
+            return None
 
     async def get_private_lesson_by_id(self, private_lesson_id: str):
         return await self.event_repository.get_private_lesson_by_id(private_lesson_id)

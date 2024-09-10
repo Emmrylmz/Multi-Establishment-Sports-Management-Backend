@@ -69,7 +69,7 @@ class EventController:
         event_data["creator_name"] = user["name"]
         event_data["team_id"] = event_data["team_id"]
         # Call to your service layer to save the event asynchronously
-        created_event = await self.event_service.create(event_data)
+        created_event = await self.event_service.create_event(event_data)
         print("created_event", created_event)
         if not created_event:
             raise HTTPException(
