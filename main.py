@@ -78,7 +78,7 @@ app.include_router(notes_router, tags=["notes"], prefix="/api/notes")
 #     # await app.initialize_services()
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    await app.rabbit_client.stop()
-    print("RabbitMQ connection closed.")
+# @app.on_event("shutdown")
+# async def shutdown_event():
+#     await app.rabbit_client.stop()
+#     print("RabbitMQ connection closed.")
