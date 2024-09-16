@@ -14,15 +14,7 @@ from functools import wraps
 from app.redis_client.RedisClient import redis_client
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
-from functools import lru_cache
 from app.config import settings
-from ..service.EventService import EventService
-from ..service.AuthService import AuthService
-from ..service.PaymentService import PaymentService
-from ..service.TeamService import TeamService
-from ..service.UserService import UserService
-from ..repositories.EventRepository import EventRepository
-from ..controller.EventController import EventController
 
 
 @asynccontextmanager
@@ -33,14 +25,6 @@ async def lifespan(app: "FooApp"):
     await ensure_indexes(app.mongodb)
     # Initialize other services
     await app.initialize_external_services()
-
-    await app.initialize_auth_service()
-    await app.initialize_event_service()
-    await app.initialize_payment_service()
-    await app.initialize_team_service()
-    await app.initialize_user_service()
-
-    await app.initialize_controllers()
 
     yield
 
@@ -93,40 +77,6 @@ class FooApp(FastAPI):
         # Initialize Redis connection
         self.state.redis_url = self.redis_url
         await self.redis_client.init_redis_pool(self)
-
-    async def initialize_auth_service(self):
-        self.auth_service = await AuthService.initialize(
-            self.mongodb, self.redis_client
-        )
-
-    async def initialize_payment_service(self):
-        self.payment_service = await PaymentService.initialize(
-            self.mongodb, self.redis_client
-        )
-
-    async def initialize_event_service(self):
-        event_repository = await EventRepository.initialize(self.mongodb)
-        self.event_service = await EventService.initialize(
-            event_repository, self.redis_client
-        )
-
-    async def initialize_team_service(self):
-        self.team_service = await TeamService.initialize(
-            self.mongodb, self.redis_client
-        )
-
-    async def initialize_user_service(self):
-        self.user_service = await UserService.initialize(
-            self.mongodb, self.redis_client
-        )
-
-    async def initialize_controllers(self):
-        self.event_controller = EventController(
-            event_service=self.event_service,
-            auth_service=self.auth_service,
-            payment_service=self.payment_service,
-            team_service=self.team_service,
-        )
 
     async def close_services(self):
         await self.redis_client.close()

@@ -73,8 +73,7 @@ async def test_insert_users_to_teams(api_client, event_loop):
 async def test_get_team_users(api_client, event_loop):
     async def _test(client):
         team_id = "66800f9cc5e4ed61fc5fba2f"
-        payload = {"team_id": team_id}
-        response = await client.post("/api/teams/get_team_users", json=payload)
+        response = await client.get(f"/api/teams/get_team_users/{team_id}")
         assert response.status == 200
         data = await response.json()
         assert "player_infos" in data

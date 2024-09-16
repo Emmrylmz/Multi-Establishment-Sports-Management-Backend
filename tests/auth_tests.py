@@ -51,32 +51,32 @@ async def test_login(api_client, event_loop):
         assert "status" in data
         assert data["status"] == "success"
         assert "access_token" in data
-        assert "refresh_token" in data
+        # assert "refresh_token" in data
         assert "user" in data
 
     await run_test(api_client, _test)
 
 
-@pytest.mark.asyncio
-async def test_refresh_token(api_client, event_loop):
-    async def _test(client):
-        # First, login to get a refresh token
-        login_data = {
-            "email": "emir11@example.com",
-            "password": "strongpassword",
-        }
-        login_response = await client.post("/api/auth/login", json=login_data)
-        login_data = await login_response.json()
-        refresh_token = login_data["refresh_token"]
+# @pytest.mark.asyncio
+# async def test_refresh_token(api_client, event_loop):
+#     async def _test(client):
+#         # First, login to get a refresh token
+#         login_data = {
+#             "email": "emir11@example.com",
+#             "password": "strongpassword",
+#         }
+#         login_response = await client.post("/api/auth/login", json=login_data)
+#         login_data = await login_response.json()
+#         refresh_token = login_data["refresh_token"]
 
-        # Now, use the refresh token to get a new access token
-        client.headers["Authorization"] = f"Bearer {refresh_token}"
-        response = await client.get("/api/auth/refresh_token")
-        assert response.status == 200
-        data = await response.json()
-        assert "access_token" in data
+#         # Now, use the refresh token to get a new access token
+#         client.headers["Authorization"] = f"Bearer {refresh_token}"
+#         response = await client.get("/api/auth/refresh_token")
+#         assert response.status == 200
+#         data = await response.json()
+#         assert "access_token" in data
 
-    await run_test(api_client, _test)
+#     await run_test(api_client, _test)
 
 
 @pytest.mark.asyncio

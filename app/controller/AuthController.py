@@ -44,7 +44,7 @@ class AuthController:
         self.team_service = team_service
 
     async def register_user(self, payload: CreateUserSchema):
-        client = self.auth_service.collection.database.client
+        client = self.auth_service.auth_repository.collection.database.client
         async with await client.start_session() as session:
             async with session.start_transaction():
                 try:
@@ -84,7 +84,7 @@ class AuthController:
                         user_data["teams"] = [str(team_id) for team_id in payload.teams]
 
                     # Create user
-                    new_user = await self.auth_service.create(
+                    new_user = await self.auth_service.create_user(
                         user_data, session=session
                     )
                     user_id = ObjectId(new_user["_id"])
@@ -124,7 +124,7 @@ class AuthController:
         user_dict = {k: v for k, v in new_user.items() if k != "password"}
         return {"status": "success", "user": user_dict}
 
-    async def login_user(self, payload: LoginUserSchema, Authorize, response: Response):
+    async def login_user(self, payload: LoginUserSchema, Authorize):
         user = await self.auth_service.verify_user_credentials(
             payload.email, payload.password
         )
@@ -145,7 +145,7 @@ class AuthController:
         team_ids = user.get("teams", [])
 
         # Fetch the teams using the team IDs
-        teams_cursor = self.team_service.collection.find(
+        teams_cursor = self.team_service.team_repository.collection.find(
             {"_id": {"$in": team_ids}}, {"_id": 1, "team_name": 1}
         )
 
@@ -159,15 +159,6 @@ class AuthController:
 
         # Optionally, store the refresh token in the database or another secure location
         # await self.auth_service.store_refresh_token(user["_id"], refresh_token)
-
-        # Set the refresh token as an HttpOnly cookie
-        response.set_cookie(
-            key="refresh_token",
-            value=refresh_token,
-            httponly=True,
-            max_age=settings.REFRESH_TOKEN_EXPIRES_IN * 60,
-            expires=settings.REFRESH_TOKEN_EXPIRES_IN * 60,
-        )
 
         user_model = User(
             id=str(user["_id"]),
@@ -187,7 +178,7 @@ class AuthController:
         return user_response
 
     # Similarly implement refresh_token and logout methods
-    async def refresh_access_token(self, response: Response, Authorize):
+    async def refresh_access_token(self, Authorize):
         try:
             Authorize.jwt_required()
             user_id = Authorize.get_jwt_subject()
@@ -216,31 +207,9 @@ class AuthController:
                 )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error)
 
-        response.set_cookie(
-            "access_token",
-            access_token,
-            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
-            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
-            "/",
-            None,
-            False,
-            True,
-            "lax",
-        )
-        response.set_cookie(
-            "logged_in",
-            "True",
-            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
-            auth_service.ACCESS_TOKEN_EXPIRES_IN * 60,
-            "/",
-            None,
-            False,
-            False,
-            "lax",
-        )
         return {"access_token": access_token}
 
-    def logout(self, response: Response, Authorize):
+    def logout(self, Authorize):
         try:
             Authorize.jwt_required()
         except Exception as e:
@@ -249,13 +218,12 @@ class AuthController:
 
         # Always clear cookies regardless of JWT validation result
         Authorize.unset_jwt_cookies()
-        response.set_cookie("logged_in", "", -1)
         return {"status": "success"}
 
     async def get_push_token(
         self, payload: PushTokenSchema, user_id: str = Depends(require_user)
     ):
-        user = await self.auth_service.get_by_id(ObjectId(user_id))
+        user = await self.auth_service.auth_repository.get_user_by_id(ObjectId(user_id))
         try:
             user_id = user["_id"]
             result = await self.token_service.save_token(payload, user_id)
@@ -281,12 +249,12 @@ class AuthController:
                 status_code=400, detail=f"Invalid user ID format: {str(e)}"
             )
 
-        client = self.auth_service.collection.database.client
+        client = self.auth_service.auth_repository.collection.database.client
         async with await client.start_session() as session:
             async with session.start_transaction():
                 try:
                     # Check if the user exists
-                    user = await self.auth_service.get_user_by_id(
+                    user = await self.auth_service.auth_repository.get_user_by_id(
                         user_id_obj, session=session
                     )
                     if not user:

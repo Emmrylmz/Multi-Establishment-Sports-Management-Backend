@@ -8,41 +8,38 @@ from ..config import settings
 from ..database import get_collection, get_database
 from pymongo.collection import Collection
 from motor.motor_asyncio import AsyncIOMotorCollection, AsyncIOMotorDatabase
-from ..service.MongoDBService import MongoDBService
 from ..redis_client import RedisClient
 from bson.json_util import dumps, loads
 from typing import List, Optional, Dict, Any
 from ..models.user_schemas import UserRole
 from app.celery_app.celery_tasks import invalidate_caches
+from ..repositories.AuthRepository import AuthRepository
+from pymongo.client_session import ClientSession
 
 
-class AuthService(MongoDBService):
+class AuthService:
     @classmethod
     async def initialize(
-        cls, database: AsyncIOMotorDatabase, redis_client: RedisClient
+        cls, auth_repository: AuthRepository, redis_client: RedisClient
     ):
         self = cls.__new__(cls)
-        await self.__init__(database, redis_client)
+        await self.__init__(auth_repository, redis_client)
         return self
 
-    async def __init__(self, database: AsyncIOMotorDatabase, redis_client: RedisClient):
-        self.database = database
+    async def __init__(
+        self, auth_repository: AuthRepository, redis_client: RedisClient
+    ):
         self.redis_client = redis_client
-        self.collection = await get_collection("Auth", database)
-        self.deleted_user_collection = await get_collection("Deleted_User", database)
-        await super().__init__(self.collection)
+        self.auth_repository = auth_repository
+
+    async def create_user(
+        self, user_data: Dict[str, Any], session: Optional[ClientSession] = None
+    ) -> Dict[str, Any]:
+        return await self.auth_repository.create_user(user_data, session)
 
     async def check_user_exists(self, email: str) -> Optional[Dict[str, Any]]:
-        cache_key = f"user:{email.lower()}"
-        cached_user = await self.redis_client.get(cache_key)
-        if cached_user:
-            return loads(cached_user)
-
-        user = await self.collection.find_one({"email": email.lower()})
+        user = await self.auth_repository.find_user_by_email(email)
         if user:
-            await self.redis_client.set(
-                cache_key, dumps(user), expire=3600
-            )  # Cache for 1 hour
             return user
         return None
 
@@ -55,7 +52,7 @@ class AuthService(MongoDBService):
         return user
 
     async def validate_role(self, user_id: str, role: "str") -> Dict[str, Any]:
-        user = await self.get_user_by_id(user_id)
+        user = await self.auth_repository.get_user_by_id(user_id)
         if user is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -71,82 +68,50 @@ class AuthService(MongoDBService):
         return user
 
     async def check_role(self, user_id: str) -> str:
-        user = await self.get_user_by_id(user_id)
+        user = await self.auth_repository.get_user_by_id(user_id)
         if user is None:
             raise ValueError("No user data available to validate role")
         return user.get("role")
 
-    async def get_users_by_role_and_province(
-        self,
-        role: UserRole,
-        province: str,
-        skip: int = 0,
-        limit: int = 20,
-        fields: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        cache_key = f"users:role:{role}:province:{province}:skip:{skip}:limit:{limit}:fields:{fields}"
-        cached_users = await self.redis_client.get(cache_key)
-        if cached_users:
-            return loads(cached_users)
+    # async def get_users_by_role_and_province(
+    #     self,
+    #     role: UserRole,
+    #     province: str,
+    #     skip: int = 0,
+    #     limit: int = 20,
+    #     fields: Optional[List[str]] = None,
+    # ) -> List[Dict[str, Any]]:
 
-        projection = {field: 1 for field in fields} if fields else None
-        users = (
-            await self.collection.find(
-                {"role": role, "province": province}, projection=projection
-            )
-            .skip(skip)
-            .limit(limit)
-            .to_list(None)
-        )
-
-        await self.redis_client.set(
-            cache_key, dumps(users), expire=3600
-        )  # Cache for 1 hour
-        return users
+    #     projection = {field: 1 for field in fields} if fields else None
+    #     users = (
+    #         await self.collection.find(
+    #             {"role": role, "province": province}, projection=projection
+    #         )
+    #         .skip(skip)
+    #         .limit(limit)
+    #         .to_list(None)
+    #     )
+    #     return users
 
     async def update_user_team_ids(self, user_id: str, team_ids: List[str]):
-        await self.collection.update_one(
-            {"_id": ObjectId(user_id)}, {"$set": {"teams": team_ids}}
+        modified_count = await self.auth_repository.update_user(
+            user_id=user_id, update_data={"teams": team_ids}
         )
-        invalidate_caches.delay(f"user:id:{user_id}")
+        return modified_count
 
     async def delete_user(self, user: Dict[str, Any], session) -> Dict[str, Any]:
 
-        response_insert = await self.deleted_user_collection.insert_one(
-            user, session=session
-        )
-        user_id = user["_id"]
-
-        response_delete = await self.collection.delete_one(
-            {"_id": ObjectId(user_id)}, session=session
+        response_delete, response_insert = await self.auth_repository.delete_user(
+            user=user, session=session
         )
 
         if response_delete.deleted_count == 0:
             raise HTTPException(status_code=500, detail="Failed to delete user")
 
-        invalidate_caches.delay(f"user:id:{user_id}")
-
         return {
             "deleted_count": response_delete.deleted_count,
             "inserted_id": str(response_insert.inserted_id),
         }
-
-    async def get_user_by_id(
-        self, user_id: str, session=None
-    ) -> Optional[Dict[str, Any]]:
-        cache_key = f"user:id:{user_id}"
-        cached_user = await self.redis_client.get(cache_key)
-        if cached_user:
-            return loads(cached_user)
-
-        user = await self.collection.find_one(
-            {"_id": ObjectId(user_id)}, session=session
-        )
-        if user:
-            await self.redis_client.set(
-                cache_key, dumps(user), expire=300
-            )  # Cache for 1 hour
-        return user
 
 
 # @staticmethod
@@ -217,5 +182,5 @@ class AuthService(MongoDBService):
 #     user_id = user_data.get("user_id")
 #     # Assuming you have a database connection and a method to get the user by ID
 #     # Replace this with your actual database query
-#     user = await db.get_user_by_id(user_id)
+#     user = await db.auth_repository.get_user_by_id(user_id)
 #     return user

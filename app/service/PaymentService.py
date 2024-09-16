@@ -17,22 +17,24 @@ from ..models.payment_schemas import (
 )
 from ..redis_client import RedisClient
 from ..database import get_collection
-from .MongoDBService import MongoDBService
 from ..celery_app.celery_tasks import update_monthly_balance, invalidate_caches
+from ..repositories.PaymentRepository import PaymentRepository
 
 
-class PaymentService(MongoDBService):
+class PaymentService:
     @classmethod
-    async def initialize(cls, database, redis_client: RedisClient):
+    async def initialize(
+        cls, payment_repository: PaymentRepository, redis_client: RedisClient
+    ):
         self = cls.__new__(cls)
-        await self.__init__(database, redis_client)
+        await self.__init__(payment_repository, redis_client)
         return self
 
-    async def __init__(self, database, redis_client: RedisClient):
-        self.collection = await get_collection("Payment", database)
-        self.balance_collection = await get_collection("Monthly_Balance", database)
+    async def __init__(
+        self, payment_repository: PaymentRepository, redis_client: RedisClient
+    ):
+        self.payment_repository = payment_repository
         self.redis_client = redis_client
-        await super().__init__(self.collection)
 
     async def get_user_data_by_year(self, user_id: str, year: int):
         cache_key = f"user_data_by_year:{user_id}:{year}"
@@ -40,8 +42,9 @@ class PaymentService(MongoDBService):
         if cached_result:
             return loads(cached_result)
 
-        query = {"user_id": user_id, "year": year}
-        payments = await self.list(query)
+        payments = await self.payment_repository.payment_list_by_user_id_and_year(
+            user_id=user_id, year=year
+        )
 
         await self.redis_client.set(cache_key, dumps(payments), expire=3600)
         return payments
@@ -57,35 +60,9 @@ class PaymentService(MongoDBService):
         current_month = current_date.month
         lookback_start_date = current_date - relativedelta(months=max_lookback_months)
 
-        pipeline = [
-            {
-                "$match": {
-                    "$or": [
-                        {"year": current_year, "month": {"$lt": current_month}},
-                        {
-                            "year": lookback_start_date.year,
-                            "month": {"$gte": lookback_start_date.month},
-                        },
-                    ],
-                    "document_type": "monthly_balance",
-                    "province": province,
-                }
-            },
-            {"$sort": {"year": 1, "month": 1}},
-            {
-                "$group": {
-                    "_id": None,
-                    "monthly_balances": {"$push": "$total_balance"},
-                    "months_count": {"$sum": 1},
-                    "first_month": {"$first": "$month"},
-                    "first_year": {"$first": "$year"},
-                    "last_month": {"$last": "$month"},
-                    "last_year": {"$last": "$year"},
-                }
-            },
-        ]
-
-        result = await self.balance_collection.aggregate(pipeline).to_list(None)
+        result = await self.payment_repository.expected_yearly_revenue_aggregation(
+            current_date, current_year, current_month, lookback_start_date, province
+        )
 
         if not result:
             return {
@@ -140,28 +117,11 @@ class PaymentService(MongoDBService):
         if province:
             match_condition["province"] = province
 
-        pipeline = [
-            {"$match": match_condition},
-            {
-                "$group": {
-                    "_id": "$province",
-                    "total_earned": {"$sum": "$total_balance"},
-                    "total_tickets": {"$sum": 1},
-                }
-            },
-            {
-                "$project": {
-                    "province": "$_id",
-                    "total_earned": 1,
-                    "total_tickets": 1,
-                    "_id": 0,
-                }
-            },
-            {"$sort": {"total_earned": -1}},
-        ]
-
-        results = await self.balance_collection.aggregate(pipeline).to_list(None)
-
+        results = (
+            await self.payment_repository.total_earned_by_year_and_province_aggregation(
+                match_condition
+            )
+        )
         total_earned_overall = sum(result["total_earned"] for result in results)
         total_tickets_overall = sum(result["total_tickets"] for result in results)
 
@@ -177,10 +137,8 @@ class PaymentService(MongoDBService):
         await self.redis_client.set(cache_key, dumps(response_content), expire=3600)
         return response_content
 
-    async def create_monthly_payments(
-        self,
-        payment_data: CreatePaymentForMonthsSchema,
-    ):
+    async def create_monthly_payments(self, payment_data: CreatePaymentForMonthsSchema):
+        session: AsyncIOMotorClientSession = None
         try:
             user_id = payment_data.user_id
             months_and_amounts = payment_data.months_and_amounts
@@ -189,55 +147,30 @@ class PaymentService(MongoDBService):
             payment_with = payment_data.payment_with
             default_amount = payment_data.default_amount
 
-            if not months_and_amounts or not year:
-                raise ValueError("Months and amounts, and year must be provided")
-
             current_date = datetime.utcnow()
-            sorted_months = sorted(int(month) for month in months_and_amounts.keys())
 
-            create_operations = []
-            balance_updates = {}
-            result = None
+            client = self.payment_repository.collection.database.client
+            session = await client.start_session()
 
-            client = self.collection.database.client
+            async with session.start_transaction():
+                create_operations, balance_updates, sorted_months = (
+                    self.payment_repository._prepare_create_operations(
+                        user_id,
+                        months_and_amounts,
+                        year,
+                        province,
+                        payment_with,
+                        default_amount,
+                        current_date,
+                    )
+                )
 
-            async with await client.start_session() as session:
-                async with session.start_transaction():
-                    for month in sorted_months:
-                        paid_amount = months_and_amounts[str(month)]
-                        due_date = datetime(year, month + 1, current_date.day)
-                        remaining_amount = default_amount - paid_amount
+                if create_operations:
+                    result = await self.payment_repository._execute_bulk_write(
+                        create_operations, session
+                    )
 
-                        status = self._determine_status(paid_amount, default_amount)
-
-                        payment_data = {
-                            "status": status,
-                            "amount": default_amount,
-                            "paid_amount": paid_amount,
-                            "remaining_amount": remaining_amount,
-                            "paid_date": current_date if paid_amount > 0 else None,
-                            "payment_with": payment_with,
-                            "due_date": due_date,
-                            "province": province,
-                            "user_id": user_id,
-                            "year": year,
-                            "month": month,
-                            "payment_type": PaymentType.MONTHLY,
-                            "created_at": current_date,
-                        }
-
-                        create_operations.append(InsertOne(payment_data))
-
-                        if (year, month) not in balance_updates:
-                            balance_updates[(year, month)] = 0
-                        balance_updates[(year, month)] += paid_amount
-
-                    if create_operations:
-                        result = await self.collection.bulk_write(
-                            create_operations, session=session
-                        )
-
-                    await self._handle_next_month_ticket(
+                    await self.payment_repository._handle_next_month_ticket(
                         user_id,
                         year,
                         max(sorted_months),
@@ -247,36 +180,47 @@ class PaymentService(MongoDBService):
                         session,
                     )
 
-                await session.commit_transaction()
+                for (year, month), amount in balance_updates.items():
+                    update_monthly_balance.delay(
+                        year=year, month=month, province=province, amount_change=amount
+                    )
+                else:
+                    result = None
 
-            for (year, month), amount in balance_updates.items():
-                update_monthly_balance.delay(
-                    year=year, month=month, province=province, amount_change=amount
-                )
+                # Transaction will be committed when exiting the context
 
+            # Invalidate caches after the transaction commits
             cache_keys = [
                 f"user_data_by_year:{user_id}:{year}",
                 f"total_earned_{year}_{province}",
             ]
-
             invalidate_caches.delay(cache_keys)
+
             return {
                 "status": "success",
                 "message": f"Created payments for {len(sorted_months)} months and handled next month's ticket",
                 "created_count": result.inserted_count if result else 0,
             }
 
-        except ValueError as ve:
-            await session.abort_transaction()
-            raise HTTPException(status_code=400, detail=str(ve))
-        except BulkWriteError as bwe:
-            await session.abort_transaction()
-            raise HTTPException(status_code=400, detail="Error processing payments")
-        except Exception as e:
-            await session.abort_transaction()
-            raise HTTPException(
-                status_code=500, detail=f"An unexpected error occurred: {str(e)}"
-            )
+        except HTTPException as http_exc:
+            if session:
+                await session.abort_transaction()
+            raise http_exc
+        # except BulkWriteError as bwe:
+        #     if session:
+        #         await session.abort_transaction()
+        #     raise HTTPException(
+        #         status_code=400, detail=f"Error processing payments: {str(bwe)}"
+        #     )
+        # except Exception as e:
+        #     if session:
+        #         await session.abort_transaction()
+        #     raise HTTPException(
+        #         status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+        #     )
+        finally:
+            if session:
+                await session.end_session()
 
     async def update_monthly_payments(self, payment_updates: PaymentUpdateList):
         try:
@@ -287,7 +231,7 @@ class PaymentService(MongoDBService):
             for update in payment_updates.payments:
                 new_paid_amount = update.paid_amount
                 new_remaining_amount = payment_updates.default_amount - new_paid_amount
-                new_status = self._determine_status(
+                new_status = self.payment_repository._determine_status(
                     new_paid_amount, payment_updates.default_amount
                 )
 
@@ -348,45 +292,68 @@ class PaymentService(MongoDBService):
                 status_code=500, detail=f"An unexpected error occurred: {str(e)}"
             )
 
-    def _determine_status(self, paid_amount, default_amount):
-        if paid_amount > default_amount:
-            return Status.OVERPAID
-        elif paid_amount == default_amount:
-            return Status.PAID
-        elif paid_amount > 0:
-            return Status.PARTIALLY_PAID
-        else:
-            return Status.PENDING
+    async def update_monthly_payments(self, payment_updates: PaymentUpdateList):
+        session: AsyncIOMotorClientSession = None
+        try:
+            # Start a client session
+            session = (
+                await self.payment_repository.collection.database.client.start_session()
+            )
 
-    async def _handle_next_month_ticket(
-        self, user_id, year, last_month, default_amount, province, payment_with, session
-    ):
-        next_month = (last_month + 1) % 12
-        next_year = year + 1 if next_month == 0 else year
-        next_due_date = datetime(next_year, next_month + 1, 1)
+            async with session.start_transaction():
+                update_operations, balance_updates, cache_keys = (
+                    self.payment_repository._prepare_update_operations(payment_updates)
+                )
 
-        await self.collection.update_one(
-            {
-                "user_id": user_id,
-                "year": next_year,
-                "month": next_month,
-                "payment_type": PaymentType.MONTHLY,
-            },
-            {
-                "$setOnInsert": {
-                    "status": Status.PENDING,
-                    "payment_with": payment_with,
-                    "due_date": next_due_date,
-                    "amount": default_amount,
-                    "paid_amount": 0,
-                    "remaining_amount": default_amount,
-                    "created_at": datetime.utcnow(),
-                    "province": province,
-                }
-            },
-            upsert=True,
-            session=session,
-        )
+                if update_operations:
+                    result = await self.payment_repository._execute_bulk_write(
+                        update_operations, session
+                    )
+
+                    modified_count = result.modified_count
+
+                    # Perform balance updates within the transaction
+                    for (
+                        year,
+                        month,
+                        province,
+                    ), amount_change in balance_updates.items():
+                        update_monthly_balance.delay(
+                            year, month, province, amount_change
+                        )  # Commit the transaction (happens automatically when exiting the context)
+
+                    response = {
+                        "status": "success",
+                        "message": f"Updated {modified_count} payments",
+                        "modified_count": modified_count,
+                    }
+
+                else:
+                    # No updates to perform
+                    response = {
+                        "status": "success",
+                        "message": "No updates to perform",
+                        "modified_count": 0,
+                    }
+
+            # Invalidate caches after transaction commits
+            invalidate_caches.delay(list(cache_keys))
+
+            return response
+
+        except HTTPException as http_exc:
+            # Re-raise HTTP exceptions
+            raise http_exc
+        except Exception as e:
+            # Abort the transaction if any exception occurs
+            if session:
+                await session.abort_transaction()
+            raise HTTPException(
+                status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+            )
+        finally:
+            if session:
+                await session.end_session()
 
     async def create_payment_for_private_lesson(
         self, created_lesson: dict, has_paid: bool, province: str
@@ -405,13 +372,9 @@ class PaymentService(MongoDBService):
             payment_with=PaymentWith.OTHER,
             due_date=now + relativedelta(months=1),
         )
-        created_payment = await self.create(payment_data.dict(exclude_unset=True))
-
-        cache_keys = [
-            f"user_data_by_year_{created_lesson['player_id']}_{now.year}",
-            f"total_earned_{now.year}_{province}",
-        ]
-        invalidate_caches.delay(cache_keys)
+        created_payment = await self.payment_repository.create_payment(
+            payment_data.dict(exclude_unset=True)
+        )
 
         return created_payment
 
@@ -431,18 +394,16 @@ class PaymentService(MongoDBService):
             update_fields = {
                 k: v for k, v in update_data.items() if k in allowed_fields
             }
-            update_fields["status"] = self._determine_status(
+            update_fields["status"] = self.payment_repository._determine_status(
                 update_data["paid_amount"], update_data["amount"]
             )
             update_fields["remaining_amount"] = (
                 update_fields["amount"] - update_fields["paid_amount"]
             )
             update_fields["updated_at"] = datetime.utcnow()
-            if not update_fields:
-                raise HTTPException(status_code=400, detail="No valid fields to update")
 
             # Perform the update
-            result = await self.collection.find_one_and_update(
+            result = await self.payment_repository.collection.find_one_and_update(
                 {"_id": ObjectId(payment_id)},
                 {"$set": update_fields},
                 return_document=True,
@@ -470,7 +431,9 @@ class PaymentService(MongoDBService):
     async def delete_payment(self, payment_id: str):
         try:
             now = datetime.utcnow()
-            result = await self.collection.delete_one({"_id": ObjectId(payment_id)})
+            result = await self.payment_repository.collection.delete_one(
+                {"_id": ObjectId(payment_id)}
+            )
             print(result.deleted_count)
             if result.deleted_count > 0:
 
@@ -502,16 +465,16 @@ class PaymentService(MongoDBService):
                     "remaining_amount": max(
                         0, payment_dict["amount"] - payment_dict["paid_amount"]
                     ),
-                    "status": self._determine_status(
+                    "status": self.payment_repository._determine_status(
                         payment_dict["paid_amount"], payment_dict["amount"]
                     ),
                 }
             )
 
             # Insert the payment into the database
-            result = await self.collection.insert_one(payment_dict)
+            result = await self.payment_repository.create_payment(payment_dict)
 
-            if not result.inserted_id:
+            if not result["_id"]:
                 raise HTTPException(status_code=400, detail="Failed to insert payment")
 
             # Trigger balance update
@@ -532,7 +495,7 @@ class PaymentService(MongoDBService):
             return {
                 "status": "success",
                 "message": "Payment created successfully",
-                "payment_id": str(result.inserted_id),
+                "payment_id": str(result["_id"]),
             }
 
         except Exception as e:
@@ -542,7 +505,7 @@ class PaymentService(MongoDBService):
 
     async def enter_expenses(self, expense_payment: Payment):
         try:
-            created_expense = await self.create(
+            created_expense = await self.payment_repository.create_payment(
                 expense_payment.dict(exclude_unset=True)
             )
 

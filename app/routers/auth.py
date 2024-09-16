@@ -46,9 +46,8 @@ async def login(
     payload: LoginUserSchema,
     Authorize: AuthJWT = Depends(),
     auth_controller: AuthController = Depends(get_auth_controller),
-    response: Response = None,
 ):
-    return await auth_controller.login_user(payload, Authorize, response=response)
+    return await auth_controller.login_user(payload, Authorize)
 
 
 @router.post("/checkToken")
@@ -71,11 +70,10 @@ async def access_protected_resource(
 
 @router.get("/logout", status_code=status.HTTP_200_OK)
 def logout(
-    response: Response,
     Authorize: AuthJWT = Depends(),
     auth_controller: AuthController = Depends(get_auth_controller),
 ):
-    return auth_controller.logout(response, Authorize)
+    return auth_controller.logout(Authorize)
 
 
 @router.get("/delete_user/{user_id}", status_code=status.HTTP_200_OK)
